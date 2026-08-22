@@ -1,39 +1,38 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useDataStore } from '@/store/dataStore';
 
 import Login from '@/pages/auth/Login';
-
-const Signup = lazy(() => import('@/pages/auth/Signup'));
-const InviteAccept = lazy(() => import('@/pages/auth/InviteAccept'));
-const OrgPicker = lazy(() => import('@/pages/auth/OrgPicker'));
-const NewOrg = lazy(() => import('@/pages/auth/NewOrg'));
-const JoinOrg = lazy(() => import('@/pages/auth/JoinOrg'));
-const CheckoutSuccess = lazy(() => import('@/pages/auth/CheckoutSuccess'));
-const CheckoutCancel = lazy(() => import('@/pages/auth/CheckoutCancel'));
+import Signup from '@/pages/auth/Signup';
+import InviteAccept from '@/pages/auth/InviteAccept';
+import OrgPicker from '@/pages/auth/OrgPicker';
+import NewOrg from '@/pages/auth/NewOrg';
+import JoinOrg from '@/pages/auth/JoinOrg';
+import CheckoutSuccess from '@/pages/auth/CheckoutSuccess';
+import CheckoutCancel from '@/pages/auth/CheckoutCancel';
 
 import { AppLayout } from '@/layout/AppLayout';
-const MyWork = lazy(() => import('@/pages/MyWork'));
-const Projects = lazy(() => import('@/pages/Projects'));
-const Members = lazy(() => import('@/pages/Members'));
-const OrgWorkload = lazy(() => import('@/pages/OrgWorkload'));
+import MyWork from '@/pages/MyWork';
+import Projects from '@/pages/Projects';
+import Members from '@/pages/Members';
+import OrgWorkload from '@/pages/OrgWorkload';
 
 import { AdminLayout } from '@/layout/AdminLayout';
-const AdminOverview = lazy(() => import('@/pages/admin/AdminOverview'));
-const AdminOrganizations = lazy(() => import('@/pages/admin/AdminOrganizations'));
-const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'));
-const AdminPlans = lazy(() => import('@/pages/admin/AdminPlans'));
-const AdminCoupons = lazy(() => import('@/pages/admin/AdminCoupons'));
-const AdminPayments = lazy(() => import('@/pages/admin/AdminPayments'));
+import AdminOverview from '@/pages/admin/AdminOverview';
+import AdminOrganizations from '@/pages/admin/AdminOrganizations';
+import AdminUsers from '@/pages/admin/AdminUsers';
+import AdminPlans from '@/pages/admin/AdminPlans';
+import AdminCoupons from '@/pages/admin/AdminCoupons';
+import AdminPayments from '@/pages/admin/AdminPayments';
 
-const Board = lazy(() => import('@/pages/project/Board'));
-const Backlog = lazy(() => import('@/pages/project/Backlog'));
-const Sprints = lazy(() => import('@/pages/project/Sprints'));
-const Store = lazy(() => import('@/pages/project/Store'));
-const ProjectWorkload = lazy(() => import('@/pages/project/ProjectWorkload'));
-const Settings = lazy(() => import('@/pages/project/Settings'));
+import Board from '@/pages/project/Board';
+import Backlog from '@/pages/project/Backlog';
+import Sprints from '@/pages/project/Sprints';
+import Store from '@/pages/project/Store';
+import ProjectWorkload from '@/pages/project/ProjectWorkload';
+import Settings from '@/pages/project/Settings';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -68,7 +67,6 @@ export default function App() {
   }
 
   return (
-    <Suspense fallback={<div className="h-screen w-full flex items-center justify-center bg-canvas text-neutral-600">Loading…</div>}>
     <Routes>
       <Route path="/" element={<Navigate to={isAuthenticated ? (isSuperadmin ? '/admin' : '/orgs') : '/login'} replace />} />
       <Route path="/login" element={<Login />} />
@@ -107,6 +105,5 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
-    </Suspense>
   );
 }
