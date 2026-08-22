@@ -32,9 +32,10 @@ export default function Login() {
       await signIn(email, password);
       await Promise.all([fetchOrgs(), fetchDiscoverable()]);
       const orgs = useDataStore.getState().orgs;
+      const isSuperadmin = useAuthStore.getState().profile?.isSuperadmin;
       toast(`Signed in · ${orgs.length} membership${orgs.length === 1 ? '' : 's'} found`);
       const redirect = params.get('redirect');
-      navigate(redirect ?? (orgs.length === 1 ? `/o/${orgs[0].slug}/my-work` : '/orgs'));
+      navigate(redirect ?? (isSuperadmin ? '/admin' : orgs.length === 1 ? `/o/${orgs[0].slug}/my-work` : '/orgs'));
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Could not sign in', 'bad');
     } finally {
