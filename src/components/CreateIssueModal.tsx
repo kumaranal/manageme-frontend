@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { useOrg, useProject } from '@/hooks/useScope';
 import { useUiStore } from '@/store/uiStore';
 import { useDataStore } from '@/store/dataStore';
-import { PEOPLE } from '@/data/people';
+import { usePeopleStore } from '@/store/peopleStore';
 import type { IssueType, Priority } from '@/types';
 
 function findField(project: NonNullable<ReturnType<typeof useProject>>, id: string) {
@@ -19,6 +19,7 @@ export function CreateIssueModal() {
   const project = useProject();
   const createIssue = useDataStore((s) => s.createIssue);
   const toast = useDataStore((s) => s.toast);
+  const people = usePeopleStore((s) => s.people);
 
   const [title, setTitle] = useState('');
   const [type, setType] = useState<IssueType>('Task');
@@ -101,7 +102,7 @@ export function CreateIssueModal() {
         {assigneeField?.enabled && (
           <Select value={assignee} onChange={(e) => setAssignee(e.target.value)} className="flex-1 h-[38px]">
             <option value="unassigned">Unassigned</option>
-            {project.members.map((m) => <option key={m.userId} value={m.userId}>{PEOPLE[m.userId].name}</option>)}
+            {project.members.map((m) => <option key={m.userId} value={m.userId}>{people[m.userId]?.name}</option>)}
           </Select>
         )}
       </div>

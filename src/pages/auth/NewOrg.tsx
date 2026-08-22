@@ -13,15 +13,14 @@ export default function NewOrg() {
   const toast = useDataStore((s) => s.toast);
   const orgs = useDataStore((s) => s.orgs);
 
-  const submit = () => {
+  const submit = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
       toast('Give the organization a name', 'bad');
       return;
     }
-    createOrg(trimmed);
-    const slug = slugify(trimmed);
-    navigate(`/o/${slug}/my-work`);
+    const org = await createOrg(trimmed);
+    if (org) navigate(`/o/${org.slug}/my-work`);
   };
 
   return (

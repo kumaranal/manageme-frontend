@@ -1,11 +1,9 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { produce } from 'immer';
-import { seedOrgs, seedDiscoverableOrgs } from '@/data/seed';
-import { CURRENT_USER_ID } from '@/data/people';
-import { deriveProjectKey, slugify, addDaysIso, todayIso } from '@/lib/format';
+import { api, ApiError } from '@/lib/api';
+import { usePeopleStore, warmPeopleCache, collectPersonIds } from '@/store/peopleStore';
 import type {
   Organization, Project, Issue, IssueType, Priority, StoreKind, TaskField, OrgRole, ProjectRole,
+  DiscoverableOrg,
 } from '@/types';
 
 export interface Toast {
@@ -14,419 +12,379 @@ export interface Toast {
   tone: 'ok' | 'bad';
 }
 
-// This store is the seam to swap for a real API: every action below mutates
-// local state directly, but each is already shaped as the request a NestJS
-// endpoint would serve (org/project scoped, single responsibility per call).
-
 interface DataState {
   orgs: Organization[];
-  discoverableOrgs: { id: string; name: string; slug: string; initial: string }[];
+  discoverableOrgs: DiscoverableOrg[];
   toasts: Toast[];
+  loading: boolean;
+  loaded: boolean;
 
   toast: (text: string, tone?: Toast['tone']) => void;
   dismissToast: (id: string) => void;
 
-  createOrg: (name: string) => string;
-  joinDiscoverableOrg: (discoverableOrgId: string) => string | undefined;
-  toggleOrgSuspend: (orgId: string) => void;
-  updateOrgCapacity: (orgId: string, hours: number) => void;
+  fetchOrgs: () => Promise<void>;
+  fetchDiscoverable: () => Promise<void>;
+  refreshOrg: (orgId: string) => Promise<void>;
+  reset: () => void;
 
-  inviteMember: (orgId: string, email: string, role: OrgRole) => void;
-  revokeInvite: (orgId: string, inviteId: string) => void;
-  updateMemberRole: (orgId: string, userId: string, role: OrgRole) => void;
-  removeMember: (orgId: string, userId: string) => void;
+  createOrg: (name: string) => Promise<Organization | undefined>;
+  joinDiscoverableOrg: (discoverableOrgId: string) => Promise<string | undefined>;
+  toggleOrgSuspend: (orgId: string) => Promise<void>;
+  updateOrgCapacity: (orgId: string, hours: number) => Promise<void>;
 
-  createProject: (orgId: string, name: string) => string;
-  toggleArchiveProject: (orgId: string, projectId: string) => void;
-  addProjectMember: (orgId: string, projectId: string, userId: string) => void;
-  updateProjectMemberRole: (orgId: string, projectId: string, userId: string, role: ProjectRole) => void;
-  removeProjectMember: (orgId: string, projectId: string, userId: string) => void;
-  updateProjectMemberHours: (orgId: string, projectId: string, userId: string, hours: number | null) => void;
+  inviteMember: (orgId: string, email: string, role: OrgRole) => Promise<void>;
+  revokeInvite: (orgId: string, inviteId: string) => Promise<void>;
+  updateMemberRole: (orgId: string, userId: string, role: OrgRole) => Promise<void>;
+  removeMember: (orgId: string, userId: string) => Promise<void>;
+  acceptInvite: (token: string) => Promise<Organization | undefined>;
 
-  renameStatus: (orgId: string, projectId: string, statusId: string, name: string) => void;
-  moveStatus: (orgId: string, projectId: string, statusId: string, dir: 'up' | 'down') => void;
-  addStatus: (orgId: string, projectId: string) => void;
-  deleteStatus: (orgId: string, projectId: string, statusId: string) => void;
-  updateTaskField: (orgId: string, projectId: string, fieldId: TaskField['id'], patch: Partial<TaskField>) => void;
-  updateSprintLength: (orgId: string, projectId: string, weeks: number) => void;
+  createProject: (orgId: string, name: string) => Promise<Project | undefined>;
+  toggleArchiveProject: (orgId: string, projectId: string) => Promise<void>;
+  addProjectMember: (orgId: string, projectId: string, userId: string) => Promise<void>;
+  updateProjectMemberRole: (orgId: string, projectId: string, userId: string, role: ProjectRole) => Promise<void>;
+  removeProjectMember: (orgId: string, projectId: string, userId: string) => Promise<void>;
+  updateProjectMemberHours: (orgId: string, projectId: string, userId: string, hours: number | null) => Promise<void>;
 
-  createSprint: (orgId: string, projectId: string, name: string, startDate: string, endDate: string) => void;
-  startSprint: (orgId: string, projectId: string, sprintId: string) => void;
-  completeSprint: (orgId: string, projectId: string, sprintId: string) => void;
+  renameStatus: (orgId: string, projectId: string, statusId: string, name: string) => Promise<void>;
+  moveStatus: (orgId: string, projectId: string, statusId: string, dir: 'up' | 'down') => Promise<void>;
+  addStatus: (orgId: string, projectId: string) => Promise<void>;
+  deleteStatus: (orgId: string, projectId: string, statusId: string) => Promise<void>;
+  updateTaskField: (orgId: string, projectId: string, fieldId: TaskField['id'], patch: Partial<TaskField>) => Promise<void>;
+  updateSprintLength: (orgId: string, projectId: string, weeks: number) => Promise<void>;
+
+  createSprint: (orgId: string, projectId: string, name: string, startDate: string, endDate: string) => Promise<void>;
+  startSprint: (orgId: string, projectId: string, sprintId: string) => Promise<void>;
+  completeSprint: (orgId: string, projectId: string, sprintId: string) => Promise<void>;
 
   createIssue: (orgId: string, projectId: string, data: {
     title: string; type: IssueType; statusId: string; priority: Priority; assignee: string | null;
     due: string | null; labels: string[]; estimatedHours: number | null; sprintId: string | null;
-  }) => void;
-  updateIssue: (orgId: string, projectId: string, issueId: string, patch: Partial<Issue>, activityText?: string) => void;
-  moveIssue: (orgId: string, projectId: string, issueId: string, statusId: string, index: number) => void;
-  addComment: (orgId: string, projectId: string, issueId: string, body: string) => void;
-  addCc: (orgId: string, projectId: string, issueId: string, userId: string) => void;
-  removeCc: (orgId: string, projectId: string, issueId: string, userId: string) => void;
+  }) => Promise<void>;
+  updateIssue: (orgId: string, projectId: string, issueId: string, patch: Partial<Issue>, activityText?: string) => Promise<void>;
+  moveIssue: (orgId: string, projectId: string, issueId: string, statusId: string, index: number) => Promise<void>;
+  addComment: (orgId: string, projectId: string, issueId: string, body: string) => Promise<void>;
+  addCc: (orgId: string, projectId: string, issueId: string, userId: string) => Promise<void>;
+  removeCc: (orgId: string, projectId: string, issueId: string, userId: string) => Promise<void>;
 
-  createStoreItem: (orgId: string, projectId: string, data: { title: string; kind: StoreKind; content: string }) => string;
-  updateStoreItem: (orgId: string, projectId: string, itemId: string, patch: { title?: string; content?: string; kind?: StoreKind }, historyText?: string) => void;
-  deleteStoreItem: (orgId: string, projectId: string, itemId: string) => void;
+  createStoreItem: (orgId: string, projectId: string, data: { title: string; kind: StoreKind; content: string }) => Promise<string | undefined>;
+  updateStoreItem: (orgId: string, projectId: string, itemId: string, patch: { title?: string; content?: string; kind?: StoreKind }, historyText?: string) => Promise<void>;
+  deleteStoreItem: (orgId: string, projectId: string, itemId: string) => Promise<void>;
 }
 
-function findOrg(orgs: Organization[], orgId: string): Organization {
-  const org = orgs.find((o) => o.id === orgId);
-  if (!org) throw new Error(`Unknown org ${orgId}`);
-  return org;
-}
-function findProject(org: Organization, projectId: string): Project {
-  const project = org.projects.find((p) => p.id === projectId);
-  if (!project) throw new Error(`Unknown project ${projectId}`);
-  return project;
-}
-function findIssue(project: Project, issueId: string): Issue {
-  const issue = project.issues.find((i) => i.id === issueId);
-  if (!issue) throw new Error(`Unknown issue ${issueId}`);
-  return issue;
-}
 function rid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export const useDataStore = create<DataState>()(
-  persist(
-    (set, get) => ({
-  orgs: seedOrgs(),
-  discoverableOrgs: seedDiscoverableOrgs(),
-  toasts: [],
+function findOrg(orgs: Organization[], orgId: string): Organization | undefined {
+  return orgs.find((o) => o.id === orgId);
+}
+function findProject(org: Organization | undefined, projectId: string): Project | undefined {
+  return org?.projects.find((p) => p.id === projectId);
+}
 
-  toast: (text, tone = 'ok') => {
-    const id = rid('t');
-    set((s) => ({ toasts: [...s.toasts, { id, text, tone }] }));
-    setTimeout(() => get().dismissToast(id), 2800);
-  },
-  dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+export const useDataStore = create<DataState>((set, get) => {
+  // Every mutation below hits the API then reloads the affected org wholesale —
+  // simple and correct, at the cost of an extra round trip per action.
+  async function run(action: () => Promise<void>, successText?: string) {
+    try {
+      await action();
+      if (successText) get().toast(successText);
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : 'Something went wrong';
+      get().toast(message, 'bad');
+    }
+  }
 
-  createOrg: (name) => {
-    const id = rid('org');
-    set(produce((s: DataState) => {
-      s.orgs.push({
-        id, name, slug: slugify(name) || id, initial: name.trim()[0]?.toUpperCase() ?? '?',
-        status: 'ACTIVE', capacityHoursPerWeek: 40,
-        members: [{ userId: CURRENT_USER_ID, role: 'ORG_ADMIN' }], invites: [], projects: [],
-      });
-    }));
-    get().toast(`${name} created · you are its org admin`);
-    return id;
-  },
+  return {
+    orgs: [],
+    discoverableOrgs: [],
+    toasts: [],
+    loading: false,
+    loaded: false,
 
-  joinDiscoverableOrg: (discoverableOrgId) => {
-    const found = get().discoverableOrgs.find((o) => o.id === discoverableOrgId);
-    if (!found) return undefined;
-    set(produce((s: DataState) => {
-      s.discoverableOrgs = s.discoverableOrgs.filter((o) => o.id !== discoverableOrgId);
-      s.orgs.push({
-        id: found.id, name: found.name, slug: found.slug, initial: found.initial,
-        status: 'ACTIVE', capacityHoursPerWeek: 40,
-        members: [{ userId: CURRENT_USER_ID, role: 'MEMBER' }], invites: [], projects: [],
-      });
-    }));
-    get().toast(`Joined ${found.name} as a member`);
-    return found.id;
-  },
-
-  toggleOrgSuspend: (orgId) => {
-    let label = '';
-    set(produce((s: DataState) => {
-      const org = findOrg(s.orgs, orgId);
-      org.status = org.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
-      label = org.status === 'SUSPENDED' ? `${org.name} suspended` : `${org.name} reinstated`;
-    }));
-    get().toast(label);
-  },
-
-  updateOrgCapacity: (orgId, hours) => set(produce((s: DataState) => {
-    findOrg(s.orgs, orgId).capacityHoursPerWeek = Math.max(1, hours);
-  })),
-
-  inviteMember: (orgId, email, role) => {
-    set(produce((s: DataState) => {
-      findOrg(s.orgs, orgId).invites.push({ id: rid('inv'), email, role, at: 'sent just now', token: rid('inv') });
-    }));
-    get().toast(`Invitation sent to ${email} · link copied`);
-  },
-  revokeInvite: (orgId, inviteId) => {
-    let email = '';
-    set(produce((s: DataState) => {
-      const org = findOrg(s.orgs, orgId);
-      email = org.invites.find((i) => i.id === inviteId)?.email ?? '';
-      org.invites = org.invites.filter((i) => i.id !== inviteId);
-    }));
-    get().toast(`Invitation to ${email} revoked`);
-  },
-  updateMemberRole: (orgId, userId, role) => {
-    set(produce((s: DataState) => {
-      const org = findOrg(s.orgs, orgId);
-      const m = org.members.find((x) => x.userId === userId);
-      if (m) m.role = role;
-    }));
-  },
-  removeMember: (orgId, userId) => {
-    set(produce((s: DataState) => {
-      const org = findOrg(s.orgs, orgId);
-      org.members = org.members.filter((m) => m.userId !== userId);
-      org.projects.forEach((p) => { p.members = p.members.filter((m) => m.userId !== userId); });
-    }));
-  },
-
-  createProject: (orgId, name) => {
-    const id = rid('p');
-    set(produce((s: DataState) => {
-      const org = findOrg(s.orgs, orgId);
-      const key = deriveProjectKey(name, org.projects.map((p) => p.key));
-      org.projects.push({
-        id, key, name, lead: CURRENT_USER_ID, counter: 0, archived: false,
-        blurb: 'A fresh project — nothing here yet.',
-        taskFields: [
-          { id: 'priority', label: 'Priority', enabled: true, required: false },
-          { id: 'assignee', label: 'Assignee', enabled: true, required: false },
-          { id: 'dueDate', label: 'Due date', enabled: true, required: false },
-          { id: 'labels', label: 'Labels', enabled: false, required: false },
-          { id: 'estimatedHours', label: 'Estimated hours', enabled: true, required: false },
-        ],
-        sprints: [], sprintConfig: { lengthWeeks: 2 }, store: [],
-        members: [{ userId: CURRENT_USER_ID, role: 'LEAD' }],
-        statuses: [
-          { id: rid('st'), name: 'To Do', category: 'TODO' },
-          { id: rid('st'), name: 'In Progress', category: 'IN_PROGRESS' },
-          { id: rid('st'), name: 'Done', category: 'DONE' },
-        ],
-        issues: [],
-      });
-    }));
-    get().toast(`${name} created · you are its lead`);
-    return id;
-  },
-
-  toggleArchiveProject: (orgId, projectId) => {
-    let label = '';
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      project.archived = !project.archived;
-      label = project.archived ? `${project.name} archived` : `${project.name} unarchived`;
-    }));
-    get().toast(label);
-  },
-
-  addProjectMember: (orgId, projectId, userId) => {
-    set(produce((s: DataState) => {
-      findProject(findOrg(s.orgs, orgId), projectId).members.push({ userId, role: 'CONTRIBUTOR' });
-    }));
-  },
-  updateProjectMemberRole: (orgId, projectId, userId, role) => {
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      const m = project.members.find((x) => x.userId === userId);
-      if (m) m.role = role;
-    }));
-  },
-  removeProjectMember: (orgId, projectId, userId) => {
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      project.members = project.members.filter((m) => m.userId !== userId);
-    }));
-  },
-  updateProjectMemberHours: (orgId, projectId, userId, hours) => {
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      const m = project.members.find((x) => x.userId === userId);
-      if (m) m.weeklyHours = hours;
-    }));
-  },
-
-  renameStatus: (orgId, projectId, statusId, name) => {
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      const st = project.statuses.find((x) => x.id === statusId);
-      if (st) st.name = name;
-    }));
-  },
-  moveStatus: (orgId, projectId, statusId, dir) => {
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      const idx = project.statuses.findIndex((x) => x.id === statusId);
-      const swapWith = dir === 'up' ? idx - 1 : idx + 1;
-      if (idx < 0 || swapWith < 0 || swapWith >= project.statuses.length) return;
-      const tmp = project.statuses[idx];
-      project.statuses[idx] = project.statuses[swapWith];
-      project.statuses[swapWith] = tmp;
-    }));
-  },
-  addStatus: (orgId, projectId) => {
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      project.statuses.splice(project.statuses.length - 1, 0, { id: rid('st'), name: 'New column', category: 'IN_PROGRESS' });
-    }));
-    get().toast('Column added');
-  },
-  deleteStatus: (orgId, projectId, statusId) => {
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      if (project.issues.some((i) => i.statusId === statusId)) return;
-      project.statuses = project.statuses.filter((x) => x.id !== statusId);
-    }));
-  },
-  updateTaskField: (orgId, projectId, fieldId, patch) => {
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      const f = project.taskFields.find((x) => x.id === fieldId);
-      if (!f) return;
-      Object.assign(f, patch);
-      if (!f.enabled) f.required = false;
-    }));
-  },
-  updateSprintLength: (orgId, projectId, weeks) => {
-    set(produce((s: DataState) => {
-      findProject(findOrg(s.orgs, orgId), projectId).sprintConfig.lengthWeeks = weeks;
-    }));
-  },
-
-  createSprint: (orgId, projectId, name, startDate, endDate) => {
-    set(produce((s: DataState) => {
-      findProject(findOrg(s.orgs, orgId), projectId).sprints.push({ id: rid('spr'), name, startDate, endDate, status: 'PLANNED' });
-    }));
-    get().toast(`${name} created`);
-  },
-  startSprint: (orgId, projectId, sprintId) => {
-    let name = '';
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      project.sprints.forEach((sp) => { if (sp.status === 'ACTIVE') sp.status = 'PLANNED'; });
-      const sp = project.sprints.find((x) => x.id === sprintId);
-      if (sp) { sp.status = 'ACTIVE'; name = sp.name; }
-    }));
-    get().toast(`${name} started`);
-  },
-  completeSprint: (orgId, projectId, sprintId) => {
-    let name = '';
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      const sp = project.sprints.find((x) => x.id === sprintId);
-      if (sp) { sp.status = 'CLOSED'; name = sp.name; }
-    }));
-    get().toast(`${name} completed`);
-  },
-
-  createIssue: (orgId, projectId, data) => {
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      const colRanks = project.issues.filter((i) => i.statusId === data.statusId).map((i) => i.rank);
-      const rank = colRanks.length ? Math.max(...colRanks) + 1000 : 1000;
-      project.counter += 1;
-      const sprint = data.sprintId ? project.sprints.find((sp) => sp.id === data.sprintId) : undefined;
-      project.issues.push({
-        id: rid('i'), number: project.counter, title: data.title, type: data.type, priority: data.priority,
-        assignee: data.assignee, statusId: data.statusId, rank, due: sprint ? sprint.endDate : data.due,
-        labels: data.labels, cc: [], comments: [], estimatedHours: data.estimatedHours,
-        sprintId: data.sprintId, activity: [{ id: rid('a'), actor: CURRENT_USER_ID, text: 'created this issue', at: 'just now' }],
-      });
-    }));
-    get().toast(`${data.title.slice(0, 40)} created`);
-  },
-
-  updateIssue: (orgId, projectId, issueId, patch, activityText) => {
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      const issue = findIssue(project, issueId);
-      Object.assign(issue, patch);
-      if (patch.sprintId !== undefined) {
-        const sprint = patch.sprintId ? project.sprints.find((sp) => sp.id === patch.sprintId) : undefined;
-        issue.due = sprint ? sprint.endDate : issue.due;
-      }
-      if (activityText) issue.activity.unshift({ id: rid('a'), actor: CURRENT_USER_ID, text: activityText, at: 'just now' });
-    }));
-  },
-
-  moveIssue: (orgId, projectId, issueId, statusId, index) => {
-    let key = '';
-    let statusName = '';
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      const issue = findIssue(project, issueId);
-      const col = project.issues.filter((i) => i.statusId === statusId && i.id !== issueId).sort((a, b) => a.rank - b.rank);
-      const prev = col[index - 1];
-      const next = col[index];
-      const lo = prev ? prev.rank : 0;
-      const hi = next ? next.rank : col.length ? col[col.length - 1].rank + 2000 : 2000;
-      issue.rank = prev || next ? (lo + hi) / 2 : 1000;
-      const from = project.statuses.find((st) => st.id === issue.statusId);
-      const to = project.statuses.find((st) => st.id === statusId);
-      if (issue.statusId !== statusId && from && to) {
-        issue.activity.unshift({ id: rid('a'), actor: CURRENT_USER_ID, text: `moved ${from.name} → ${to.name}`, at: 'just now' });
-      }
-      issue.statusId = statusId;
-      key = `${project.key}-${issue.number}`;
-      statusName = to?.name ?? '';
-    }));
-    get().toast(`${key} → ${statusName}`);
-  },
-
-  addComment: (orgId, projectId, issueId, body) => {
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      const issue = findIssue(project, issueId);
-      issue.comments.push({ id: rid('c'), author: CURRENT_USER_ID, body, at: 'just now' });
-      issue.activity.unshift({ id: rid('a'), actor: CURRENT_USER_ID, text: 'commented', at: 'just now' });
-    }));
-  },
-  addCc: (orgId, projectId, issueId, userId) => {
-    set(produce((s: DataState) => {
-      const issue = findIssue(findProject(findOrg(s.orgs, orgId), projectId), issueId);
-      if (!issue.cc.includes(userId)) issue.cc.push(userId);
-    }));
-  },
-  removeCc: (orgId, projectId, issueId, userId) => {
-    set(produce((s: DataState) => {
-      const issue = findIssue(findProject(findOrg(s.orgs, orgId), projectId), issueId);
-      issue.cc = issue.cc.filter((id) => id !== userId);
-    }));
-  },
-
-  createStoreItem: (orgId, projectId, data) => {
-    const id = rid('st');
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      project.store.unshift({
-        id, title: data.title, kind: data.kind, content: data.content, updatedBy: CURRENT_USER_ID, updatedAt: 'just now',
-        history: [{ actor: CURRENT_USER_ID, text: 'created this item', at: 'just now' }],
-      });
-    }));
-    get().toast(`${data.title} added to the store`);
-    return id;
-  },
-  updateStoreItem: (orgId, projectId, itemId, patch, historyText) => {
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      const item = project.store.find((x) => x.id === itemId);
-      if (!item) return;
-      Object.assign(item, patch);
-      item.updatedBy = CURRENT_USER_ID;
-      item.updatedAt = 'just now';
-      if (historyText) item.history.unshift({ actor: CURRENT_USER_ID, text: historyText, at: 'just now' });
-    }));
-  },
-  deleteStoreItem: (orgId, projectId, itemId) => {
-    set(produce((s: DataState) => {
-      const project = findProject(findOrg(s.orgs, orgId), projectId);
-      project.store = project.store.filter((x) => x.id !== itemId);
-    }));
-  },
-    }),
-    {
-      name: 'manage-me-data',
-      version: 1,
-      partialize: (s) => ({ orgs: s.orgs, discoverableOrgs: s.discoverableOrgs }),
+    toast: (text, tone = 'ok') => {
+      const id = rid('t');
+      set((s) => ({ toasts: [...s.toasts, { id, text, tone }] }));
+      setTimeout(() => get().dismissToast(id), 2800);
     },
-  ),
-);
+    dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+
+    fetchOrgs: async () => {
+      set({ loading: true });
+      try {
+        const orgs = await api.get<Organization[]>('/organizations');
+        await warmPeopleCache(orgs);
+        set({ orgs, loaded: true });
+      } finally {
+        set({ loading: false });
+      }
+    },
+
+    fetchDiscoverable: async () => {
+      const discoverableOrgs = await api.get<DiscoverableOrg[]>('/organizations/discoverable');
+      set({ discoverableOrgs });
+    },
+
+    refreshOrg: async (orgId) => {
+      const org = await api.get<Organization>(`/organizations/${orgId}`);
+      await usePeopleStore.getState().ensure(collectPersonIds(org));
+      set((s) => ({ orgs: s.orgs.some((o) => o.id === orgId) ? s.orgs.map((o) => (o.id === orgId ? org : o)) : [...s.orgs, org] }));
+    },
+
+    reset: () => set({ orgs: [], discoverableOrgs: [], toasts: [], loaded: false }),
+
+    createOrg: async (name) => {
+      let created: Organization | undefined;
+      await run(async () => {
+        created = await api.post<Organization>('/organizations', { name });
+        await usePeopleStore.getState().ensure(collectPersonIds(created));
+        set((s) => ({ orgs: [...s.orgs, created!] }));
+      }, `${name} created · you are its org admin`);
+      return created;
+    },
+
+    joinDiscoverableOrg: async (discoverableOrgId) => {
+      const found = get().discoverableOrgs.find((o) => o.id === discoverableOrgId);
+      if (!found) return undefined;
+      await run(async () => {
+        const org = await api.post<Organization>(`/organizations/${discoverableOrgId}/join`);
+        await usePeopleStore.getState().ensure(collectPersonIds(org));
+        set((s) => ({
+          orgs: [...s.orgs, org],
+          discoverableOrgs: s.discoverableOrgs.filter((o) => o.id !== discoverableOrgId),
+        }));
+      }, `Joined ${found.name} as a member`);
+      return found.id;
+    },
+
+    toggleOrgSuspend: async (orgId) => {
+      const org = findOrg(get().orgs, orgId);
+      const willSuspend = org?.status !== 'SUSPENDED';
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/suspend`);
+        await get().refreshOrg(orgId);
+      }, org ? (willSuspend ? `${org.name} suspended` : `${org.name} reinstated`) : undefined);
+    },
+
+    updateOrgCapacity: async (orgId, hours) => {
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/capacity`, { hours: Math.max(1, hours) });
+        await get().refreshOrg(orgId);
+      });
+    },
+
+    inviteMember: async (orgId, email, role) => {
+      await run(async () => {
+        await api.post(`/organizations/${orgId}/invites`, { email, role });
+        await get().refreshOrg(orgId);
+      }, `Invitation sent to ${email}`);
+    },
+
+    revokeInvite: async (orgId, inviteId) => {
+      const email = findOrg(get().orgs, orgId)?.invites.find((i) => i.id === inviteId)?.email ?? '';
+      await run(async () => {
+        await api.delete(`/organizations/${orgId}/invites/${inviteId}`);
+        await get().refreshOrg(orgId);
+      }, `Invitation to ${email} revoked`);
+    },
+
+    updateMemberRole: async (orgId, userId, role) => {
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/members/${userId}`, { role });
+        await get().refreshOrg(orgId);
+      });
+    },
+
+    removeMember: async (orgId, userId) => {
+      await run(async () => {
+        await api.delete(`/organizations/${orgId}/members/${userId}`);
+        await get().refreshOrg(orgId);
+      });
+    },
+
+    acceptInvite: async (token) => {
+      let org: Organization | undefined;
+      await run(async () => {
+        org = await api.post<Organization>(`/invites/${token}/accept`);
+        await usePeopleStore.getState().ensure(collectPersonIds(org));
+        set((s) => ({ orgs: s.orgs.some((o) => o.id === org!.id) ? s.orgs.map((o) => (o.id === org!.id ? org! : o)) : [...s.orgs, org!] }));
+      }, `Membership confirmed in ${org?.name ?? 'the organization'}`);
+      return org;
+    },
+
+    createProject: async (orgId, name) => {
+      let created: Project | undefined;
+      await run(async () => {
+        await api.post(`/organizations/${orgId}/projects`, { name });
+        await get().refreshOrg(orgId);
+        created = findOrg(get().orgs, orgId)?.projects.find((p) => p.name === name);
+      }, `${name} created · you are its lead`);
+      return created;
+    },
+
+    toggleArchiveProject: async (orgId, projectId) => {
+      const project = findProject(findOrg(get().orgs, orgId), projectId);
+      const willArchive = !project?.archived;
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/projects/${projectId}/archive`);
+        await get().refreshOrg(orgId);
+      }, project ? (willArchive ? `${project.name} archived` : `${project.name} unarchived`) : undefined);
+    },
+
+    addProjectMember: async (orgId, projectId, userId) => {
+      await run(async () => {
+        await api.post(`/organizations/${orgId}/projects/${projectId}/members`, { userId });
+        await get().refreshOrg(orgId);
+      });
+    },
+    updateProjectMemberRole: async (orgId, projectId, userId, role) => {
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/projects/${projectId}/members/${userId}/role`, { role });
+        await get().refreshOrg(orgId);
+      });
+    },
+    removeProjectMember: async (orgId, projectId, userId) => {
+      await run(async () => {
+        await api.delete(`/organizations/${orgId}/projects/${projectId}/members/${userId}`);
+        await get().refreshOrg(orgId);
+      });
+    },
+    updateProjectMemberHours: async (orgId, projectId, userId, hours) => {
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/projects/${projectId}/members/${userId}/hours`, { hours });
+        await get().refreshOrg(orgId);
+      });
+    },
+
+    renameStatus: async (orgId, projectId, statusId, name) => {
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/projects/${projectId}/statuses/${statusId}/rename`, { name });
+        await get().refreshOrg(orgId);
+      });
+    },
+    moveStatus: async (orgId, projectId, statusId, dir) => {
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/projects/${projectId}/statuses/${statusId}/move`, { direction: dir });
+        await get().refreshOrg(orgId);
+      });
+    },
+    addStatus: async (orgId, projectId) => {
+      await run(async () => {
+        await api.post(`/organizations/${orgId}/projects/${projectId}/statuses`);
+        await get().refreshOrg(orgId);
+      }, 'Column added');
+    },
+    deleteStatus: async (orgId, projectId, statusId) => {
+      await run(async () => {
+        await api.delete(`/organizations/${orgId}/projects/${projectId}/statuses/${statusId}`);
+        await get().refreshOrg(orgId);
+      });
+    },
+    updateTaskField: async (orgId, projectId, fieldId, patch) => {
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/projects/${projectId}/task-fields/${fieldId}`, patch);
+        await get().refreshOrg(orgId);
+      });
+    },
+    updateSprintLength: async (orgId, projectId, weeks) => {
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/projects/${projectId}/sprint-config`, { weeks });
+        await get().refreshOrg(orgId);
+      });
+    },
+
+    createSprint: async (orgId, projectId, name, startDate, endDate) => {
+      await run(async () => {
+        await api.post(`/organizations/${orgId}/projects/${projectId}/sprints`, { name, startDate, endDate });
+        await get().refreshOrg(orgId);
+      }, `${name} created`);
+    },
+    startSprint: async (orgId, projectId, sprintId) => {
+      const name = findProject(findOrg(get().orgs, orgId), projectId)?.sprints.find((s) => s.id === sprintId)?.name;
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/projects/${projectId}/sprints/${sprintId}/start`);
+        await get().refreshOrg(orgId);
+      }, name ? `${name} started` : undefined);
+    },
+    completeSprint: async (orgId, projectId, sprintId) => {
+      const name = findProject(findOrg(get().orgs, orgId), projectId)?.sprints.find((s) => s.id === sprintId)?.name;
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/projects/${projectId}/sprints/${sprintId}/complete`);
+        await get().refreshOrg(orgId);
+      }, name ? `${name} completed` : undefined);
+    },
+
+    createIssue: async (orgId, projectId, data) => {
+      await run(async () => {
+        await api.post(`/organizations/${orgId}/projects/${projectId}/issues`, data);
+        await get().refreshOrg(orgId);
+      }, `${data.title.slice(0, 40)} created`);
+    },
+
+    updateIssue: async (orgId, projectId, issueId, patch, activityText) => {
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/projects/${projectId}/issues/${issueId}`, { ...patch, activityText });
+        await get().refreshOrg(orgId);
+      });
+    },
+
+    moveIssue: async (orgId, projectId, issueId, statusId, index) => {
+      const project = findProject(findOrg(get().orgs, orgId), projectId);
+      const issue = project?.issues.find((i) => i.id === issueId);
+      const statusName = project?.statuses.find((s) => s.id === statusId)?.name ?? '';
+      const key = project && issue ? `${project.key}-${issue.number}` : '';
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/projects/${projectId}/issues/${issueId}/move`, { statusId, index });
+        await get().refreshOrg(orgId);
+      }, key ? `${key} → ${statusName}` : undefined);
+    },
+
+    addComment: async (orgId, projectId, issueId, body) => {
+      await run(async () => {
+        await api.post(`/organizations/${orgId}/projects/${projectId}/issues/${issueId}/comments`, { body });
+        await get().refreshOrg(orgId);
+      });
+    },
+    addCc: async (orgId, projectId, issueId, userId) => {
+      await run(async () => {
+        await api.put(`/organizations/${orgId}/projects/${projectId}/issues/${issueId}/cc/${userId}`);
+        await get().refreshOrg(orgId);
+      });
+    },
+    removeCc: async (orgId, projectId, issueId, userId) => {
+      await run(async () => {
+        await api.delete(`/organizations/${orgId}/projects/${projectId}/issues/${issueId}/cc/${userId}`);
+        await get().refreshOrg(orgId);
+      });
+    },
+
+    createStoreItem: async (orgId, projectId, data) => {
+      let id: string | undefined;
+      await run(async () => {
+        const item = await api.post<{ id: string }>(`/organizations/${orgId}/projects/${projectId}/store`, data);
+        id = item.id;
+        await get().refreshOrg(orgId);
+      }, `${data.title} added to the store`);
+      return id;
+    },
+    updateStoreItem: async (orgId, projectId, itemId, patch, historyText) => {
+      await run(async () => {
+        await api.patch(`/organizations/${orgId}/projects/${projectId}/store/${itemId}`, { ...patch, historyText });
+        await get().refreshOrg(orgId);
+      });
+    },
+    deleteStoreItem: async (orgId, projectId, itemId) => {
+      await run(async () => {
+        await api.delete(`/organizations/${orgId}/projects/${projectId}/store/${itemId}`);
+        await get().refreshOrg(orgId);
+      });
+    },
+  };
+});
 
 export function nextSprintDefaults(lengthWeeks: number, existingCount: number) {
-  const start = todayIso();
-  const end = addDaysIso(start, lengthWeeks * 7);
-  return { name: `Sprint ${existingCount + 1}`, start, end };
+  const today = new Date().toISOString().slice(0, 10);
+  const end = new Date(today + 'T00:00:00');
+  end.setDate(end.getDate() + lengthWeeks * 7);
+  return { name: `Sprint ${existingCount + 1}`, start: today, end: end.toISOString().slice(0, 10) };
 }

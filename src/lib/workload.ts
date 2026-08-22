@@ -1,9 +1,7 @@
-import type { Issue, Project, WorkloadPeriod } from '@/types';
-import { PEOPLE } from '@/data/people';
+import type { Issue, Project, User, WorkloadPeriod } from '@/types';
 
-function periodWindow(period: WorkloadPeriod): { start: Date; end: Date } {
-  const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+function periodWindow(period: WorkloadPeriod, anchor: Date): { start: Date; end: Date } {
+  const d = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
   if (period === 'day') return { start: d, end: d };
   if (period === 'month') {
     return { start: new Date(d.getFullYear(), d.getMonth(), 1), end: new Date(d.getFullYear(), d.getMonth() + 1, 0) };
@@ -14,6 +12,26 @@ function periodWindow(period: WorkloadPeriod): { start: Date; end: Date } {
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
   return { start, end };
+}
+
+export function shiftPeriod(anchor: Date, period: WorkloadPeriod, dir: 1 | -1): Date {
+  const d = new Date(anchor);
+  if (period === 'day') d.setDate(d.getDate() + dir);
+  else if (period === 'week') d.setDate(d.getDate() + dir * 7);
+  else d.setMonth(d.getMonth() + dir);
+  return d;
+}
+
+export function periodLabel(period: WorkloadPeriod, anchor: Date): string {
+  const { start, end } = periodWindow(period, anchor);
+  if (period === 'day') {
+    return start.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  if (period === 'month') {
+    return start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  }
+  const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `${fmt(start)} – ${fmt(end)}, ${end.getFullYear()}`;
 }
 
 export interface WorkloadRow {
@@ -28,8 +46,15 @@ export interface WorkloadRow {
   unscheduledHours: number;
 }
 
-export function computeWorkload(userIds: string[], issues: Issue[], capacityOf: (uid: string) => number, period: WorkloadPeriod): WorkloadRow[] {
-  const { start, end } = periodWindow(period);
+export function computeWorkload(
+  userIds: string[],
+  issues: Issue[],
+  capacityOf: (uid: string) => number,
+  period: WorkloadPeriod,
+  people: Record<string, User>,
+  anchor: Date = new Date(),
+): WorkloadRow[] {
+  const { start, end } = periodWindow(period, anchor);
   const factor = period === 'day' ? 1 / 5 : period === 'month' ? 4 : 1;
   return userIds.map((uid) => {
     let occupied = 0;
@@ -48,8 +73,8 @@ export function computeWorkload(userIds: string[], issues: Issue[], capacityOf: 
     const pct = capacity ? Math.round((occupied / capacity) * 100) : 0;
     return {
       userId: uid,
-      name: PEOPLE[uid].name,
-      initials: PEOPLE[uid].initials,
+      name: people[uid]?.name ?? '—',
+      initials: people[uid]?.initials ?? '?',
       occupied,
       capacity: Math.round(capacity * 10) / 10,
       weeklyCapacity,

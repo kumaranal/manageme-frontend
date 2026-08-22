@@ -1,19 +1,18 @@
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Diamond } from 'lucide-react';
 import { useDataStore } from '@/store/dataStore';
-import { useMe } from '@/hooks/useScope';
-import { PEOPLE } from '@/data/people';
+import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/Button';
 import { Pill } from '@/components/ui/Pill';
 import { OrgAvatar } from '@/components/ui/Avatar';
 
 export default function Superadmin() {
-  const me = useMe();
+  const isSuperadmin = useAuthStore((s) => s.profile?.isSuperadmin);
   const orgs = useDataStore((s) => s.orgs);
   const toggleOrgSuspend = useDataStore((s) => s.toggleOrgSuspend);
   const navigate = useNavigate();
 
-  if (!PEOPLE[me]?.isSuperadmin) return <Navigate to="/orgs" replace />;
+  if (!isSuperadmin) return <Navigate to="/orgs" replace />;
 
   const orgCount = orgs.length;
   const memberCount = orgs.reduce((n, o) => n + o.members.length, 0);

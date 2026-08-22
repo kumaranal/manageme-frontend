@@ -8,9 +8,9 @@ export default function JoinOrg() {
   const discoverable = useDataStore((s) => s.discoverableOrgs);
   const joinDiscoverableOrg = useDataStore((s) => s.joinDiscoverableOrg);
 
-  const join = (id: string, slug: string) => {
-    joinDiscoverableOrg(id);
-    navigate(`/o/${slug}/my-work`);
+  const join = async (id: string, slug: string) => {
+    const joinedId = await joinDiscoverableOrg(id);
+    if (joinedId) navigate(`/o/${slug}/my-work`);
   };
 
   return (

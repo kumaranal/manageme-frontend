@@ -5,7 +5,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Select } from '@/components/ui/Field';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useDataStore } from '@/store/dataStore';
-import { PEOPLE } from '@/data/people';
+import { usePeopleStore } from '@/store/peopleStore';
 import { isOrgAdmin as checkOrgAdmin } from '@/lib/permissions';
 import type { ProjectRole, TaskField } from '@/types';
 import clsx from 'clsx';
@@ -26,6 +26,7 @@ export default function Settings() {
   const updateProjectMemberRole = useDataStore((s) => s.updateProjectMemberRole);
   const removeProjectMember = useDataStore((s) => s.removeProjectMember);
   const toggleArchiveProject = useDataStore((s) => s.toggleArchiveProject);
+  const people = usePeopleStore((s) => s.people);
 
   if (!org || !project) return null;
 
@@ -138,12 +139,12 @@ export default function Settings() {
               className="h-9 border border-line rounded-full px-3.5 text-[13px] bg-canvas"
             >
               <option value="">Add a member…</option>
-              {addableMembers.map((m) => <option key={m.userId} value={m.userId}>{PEOPLE[m.userId].name}</option>)}
+              {addableMembers.map((m) => <option key={m.userId} value={m.userId}>{people[m.userId]?.name}</option>)}
             </select>
           )}
         </div>
         {project.members.map((m) => {
-          const person = PEOPLE[m.userId];
+          const person = people[m.userId];
           const orgAdmin = checkOrgAdmin(org, m.userId);
           const editable = canEdit && !orgAdmin;
           const removable = canEdit && !orgAdmin && m.userId !== me;

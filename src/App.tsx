@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuthStore } from '@/store/authStore';
+import { useDataStore } from '@/store/dataStore';
 
 import Login from '@/pages/auth/Login';
 import Signup from '@/pages/auth/Signup';
@@ -30,7 +32,29 @@ function RequireAuth({ children }: { children: ReactNode }) {
 }
 
 export default function App() {
+  const status = useAuthStore((s) => s.status);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const init = useAuthStore((s) => s.init);
+  const fetchOrgs = useDataStore((s) => s.fetchOrgs);
+  const fetchDiscoverable = useDataStore((s) => s.fetchDiscoverable);
+  const resetData = useDataStore((s) => s.reset);
+
+  useEffect(() => {
+    init();
+  }, [init]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchOrgs();
+      fetchDiscoverable();
+    } else {
+      resetData();
+    }
+  }, [isAuthenticated, fetchOrgs, fetchDiscoverable, resetData]);
+
+  if (status === 'loading') {
+    return <div className="h-screen w-full flex items-center justify-center bg-canvas text-neutral-600">Loading…</div>;
+  }
 
   return (
     <Routes>

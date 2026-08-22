@@ -1,4 +1,4 @@
-import { PEOPLE } from '@/data/people';
+import { usePeopleStore } from '@/store/peopleStore';
 import { cn } from '@/lib/cn';
 
 const sizeClasses: Record<'xs' | 'sm' | 'md' | 'lg', string> = {
@@ -11,7 +11,7 @@ const sizeClasses: Record<'xs' | 'sm' | 'md' | 'lg', string> = {
 export function Avatar({
   userId, size = 'md', tone = 'neutral', className,
 }: { userId: string; size?: 'xs' | 'sm' | 'md' | 'lg'; tone?: 'neutral' | 'accent' | 'accent2'; className?: string }) {
-  const person = PEOPLE[userId];
+  const person = usePeopleStore((s) => s.people[userId]);
   const toneClasses = tone === 'accent'
     ? 'bg-accent text-canvas'
     : tone === 'accent2'

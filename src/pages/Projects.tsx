@@ -5,7 +5,7 @@ import { Pill } from '@/components/ui/Pill';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useUiStore } from '@/store/uiStore';
-import { PEOPLE } from '@/data/people';
+import { usePeopleStore } from '@/store/peopleStore';
 import { projectRole } from '@/lib/permissions';
 
 export default function Projects() {
@@ -13,6 +13,7 @@ export default function Projects() {
   const me = useMe();
   const { isOrgAdmin } = usePermissions();
   const openModal = useUiStore((s) => s.openModal);
+  const people = usePeopleStore((s) => s.people);
   const [showArchived, setShowArchived] = useState(false);
   if (!org) return null;
 
@@ -50,7 +51,7 @@ export default function Projects() {
                 <div className="flex gap-4 text-xs text-neutral-600">
                   <div>{openCount} open</div>
                   <div>you: {role?.toLowerCase() ?? 'no access'}</div>
-                  <div>lead: {PEOPLE[p.lead]?.name.split(' ')[0]}</div>
+                  <div>lead: {people[p.lead]?.name.split(' ')[0]}</div>
                 </div>
               </Link>
             );

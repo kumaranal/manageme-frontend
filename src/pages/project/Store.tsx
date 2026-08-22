@@ -3,7 +3,9 @@ import { useOrg, useProject, usePermissions } from '@/hooks/useScope';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useUiStore } from '@/store/uiStore';
-import { STORE_KIND_LABEL, PEOPLE } from '@/data/people';
+import { STORE_KIND_LABEL } from '@/data/people';
+import { usePeopleStore } from '@/store/peopleStore';
+import { timeAgo } from '@/lib/format';
 import clsx from 'clsx';
 
 const KIND_TONE: Record<string, string> = {
@@ -20,6 +22,7 @@ export default function Store() {
   const openModal = useUiStore((s) => s.openModal);
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const people = usePeopleStore((s) => s.people);
   if (!org || !project) return null;
 
   return (
@@ -40,7 +43,7 @@ export default function Store() {
               <div className="text-[14.5px] font-semibold mb-0.5">{it.title}</div>
               <div className="text-[12.5px] text-neutral-600 truncate font-mono">{it.content}</div>
             </div>
-            <div className="hidden md:block w-[170px] flex-none text-right text-xs text-neutral-600">updated {it.updatedAt} by {PEOPLE[it.updatedBy]?.name.split(' ')[0]}</div>
+            <div className="hidden md:block w-[170px] flex-none text-right text-xs text-neutral-600">updated {timeAgo(it.updatedAt)} by {people[it.updatedBy]?.name.split(' ')[0]}</div>
           </div>
         ))}
         {project.store.length === 0 && <EmptyState>Nothing stored for this project yet.</EmptyState>}

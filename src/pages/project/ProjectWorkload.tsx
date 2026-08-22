@@ -4,7 +4,8 @@ import { Avatar } from '@/components/ui/Avatar';
 import { TextInput } from '@/components/ui/Field';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useDataStore } from '@/store/dataStore';
-import { computeWorkload, openIssuesForWorkload, barColor } from '@/lib/workload';
+import { usePeopleStore } from '@/store/peopleStore';
+import { computeWorkload, openIssuesForWorkload, barColor, shiftPeriod, periodLabel } from '@/lib/workload';
 import type { WorkloadPeriod } from '@/types';
 import clsx from 'clsx';
 
@@ -17,12 +18,14 @@ export default function ProjectWorkload() {
   const project = useProject();
   const { isManager } = usePermissions();
   const updateProjectMemberHours = useDataStore((s) => s.updateProjectMemberHours);
+  const people = usePeopleStore((s) => s.people);
   const [period, setPeriod] = useState<WorkloadPeriod>('week');
+  const [anchor, setAnchor] = useState(() => new Date());
   if (!org || !project) return null;
 
   const issues = openIssuesForWorkload(project);
   const capacityOf = (uid: string) => project.members.find((m) => m.userId === uid)?.weeklyHours ?? org.capacityHoursPerWeek;
-  const rows = computeWorkload(project.members.map((m) => m.userId), issues, capacityOf, period);
+  const rows = computeWorkload(project.members.map((m) => m.userId), issues, capacityOf, period, people, anchor);
 
   return (
     <div className="flex flex-col gap-4 max-w-[900px]">
@@ -37,6 +40,31 @@ export default function ProjectWorkload() {
               {p.label}
             </button>
           ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAnchor((a) => shiftPeriod(a, period, -1))}
+            className="w-7 h-7 rounded-full bg-neutral-100 shadow-sm hover:shadow-md cursor-pointer text-sm"
+            aria-label="Previous period"
+          >
+            ←
+          </button>
+          <div className="text-[13px] font-semibold min-w-[130px] text-center">
+            {periodLabel(period, anchor)}
+          </div>
+          <button
+            onClick={() => setAnchor((a) => shiftPeriod(a, period, 1))}
+            className="w-7 h-7 rounded-full bg-neutral-100 shadow-sm hover:shadow-md cursor-pointer text-sm"
+            aria-label="Next period"
+          >
+            →
+          </button>
+          <button
+            onClick={() => setAnchor(new Date())}
+            className="text-[12.5px] text-accent-700 font-semibold cursor-pointer"
+          >
+            Today
+          </button>
         </div>
         <div className="text-[12.5px] text-neutral-600">Org default: {org.capacityHoursPerWeek}h / week — override per member below for anyone split across projects</div>
       </div>

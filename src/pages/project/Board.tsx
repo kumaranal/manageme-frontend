@@ -8,7 +8,8 @@ import { Avatar, UnassignedAvatar } from '@/components/ui/Avatar';
 import { Pill } from '@/components/ui/Pill';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDue, isOverdue } from '@/lib/format';
-import { PEOPLE, PRIORITY_CODE } from '@/data/people';
+import { PRIORITY_CODE } from '@/data/people';
+import { usePeopleStore } from '@/store/peopleStore';
 import type { Issue } from '@/types';
 
 interface DragState { issueId: string; overStatus: string; overIndex: number }
@@ -19,6 +20,7 @@ export default function Board() {
   const me = useMe();
   const { isManager, canEdit } = usePermissions();
   const moveIssue = useDataStore((s) => s.moveIssue);
+  const people = usePeopleStore((s) => s.people);
   const navigate = useNavigate();
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [sprintIds, setSprintIds] = useState<string[]>([]);
@@ -37,9 +39,9 @@ export default function Board() {
   const assigneeOptions = useMemo(() => {
     if (!project) return [];
     const opts = [{ id: 'unassigned', label: 'Unassigned' }, { id: me, label: 'Me' }];
-    project.members.filter((m) => m.userId !== me).forEach((m) => opts.push({ id: m.userId, label: PEOPLE[m.userId].name.split(' ')[0] }));
+    project.members.filter((m) => m.userId !== me).forEach((m) => opts.push({ id: m.userId, label: (people[m.userId]?.name ?? '').split(' ')[0] }));
     return opts;
-  }, [project, me]);
+  }, [project, me, people]);
   const sprintOptions = useMemo(() => [{ id: 'none', label: 'No sprint' }, ...(project?.sprints.map((s) => ({ id: s.id, label: s.name })) ?? [])], [project]);
 
   if (!org || !project) return null;

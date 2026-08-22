@@ -6,7 +6,7 @@ import { OrgAvatar, Avatar } from '@/components/ui/Avatar';
 import { useDataStore } from '@/store/dataStore';
 import { useAuthStore } from '@/store/authStore';
 import { useOrg, useMe } from '@/hooks/useScope';
-import { PEOPLE } from '@/data/people';
+import { usePeopleStore } from '@/store/peopleStore';
 import { orgRole } from '@/lib/permissions';
 import { useUiStore } from '@/store/uiStore';
 
@@ -20,7 +20,7 @@ export function Sidebar() {
   const signOut = useAuthStore((s) => s.signOut);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const person = PEOPLE[me];
+  const person = usePeopleStore((s) => s.people[me]);
   const mobileNavOpen = useUiStore((s) => s.mobileNavOpen);
   const closeMobileNav = useUiStore((s) => s.closeMobileNav);
 

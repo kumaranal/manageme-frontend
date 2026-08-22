@@ -5,10 +5,13 @@ import { Pill } from "@/components/ui/Pill";
 import { TextInput } from "@/components/ui/Field";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useDataStore } from "@/store/dataStore";
+import { usePeopleStore } from "@/store/peopleStore";
 import {
   computeWorkload,
   openIssuesForWorkload,
   barColor,
+  shiftPeriod,
+  periodLabel,
 } from "@/lib/workload";
 import type { WorkloadPeriod } from "@/types";
 import clsx from "clsx";
@@ -24,7 +27,9 @@ export default function OrgWorkload() {
   const org = useOrg();
   const { isOrgAdmin } = usePermissions();
   const updateOrgCapacity = useDataStore((s) => s.updateOrgCapacity);
+  const people = usePeopleStore((s) => s.people);
   const [period, setPeriod] = useState<WorkloadPeriod>("week");
+  const [anchor, setAnchor] = useState(() => new Date());
   if (!org) return null;
 
   const allIssues = org.projects.flatMap((p) => openIssuesForWorkload(p));
@@ -33,6 +38,8 @@ export default function OrgWorkload() {
     allIssues,
     () => org.capacityHoursPerWeek,
     period,
+    people,
+    anchor,
   );
 
   return (
@@ -53,6 +60,31 @@ export default function OrgWorkload() {
               {p.label}
             </button>
           ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAnchor((a) => shiftPeriod(a, period, -1))}
+            className="w-7 h-7 rounded-full bg-neutral-100 shadow-sm hover:shadow-md cursor-pointer text-sm"
+            aria-label="Previous period"
+          >
+            ←
+          </button>
+          <div className="text-[13px] font-semibold min-w-[130px] text-center">
+            {periodLabel(period, anchor)}
+          </div>
+          <button
+            onClick={() => setAnchor((a) => shiftPeriod(a, period, 1))}
+            className="w-7 h-7 rounded-full bg-neutral-100 shadow-sm hover:shadow-md cursor-pointer text-sm"
+            aria-label="Next period"
+          >
+            →
+          </button>
+          <button
+            onClick={() => setAnchor(new Date())}
+            className="text-[12.5px] text-accent-700 font-semibold cursor-pointer"
+          >
+            Today
+          </button>
         </div>
         <div className="hidden sm:block flex-1" />
         <div className="text-[12.5px] text-neutral-600">Working hours</div>

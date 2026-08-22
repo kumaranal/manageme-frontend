@@ -9,7 +9,6 @@ import { orgRole } from '@/lib/permissions';
 export default function OrgPicker() {
   const navigate = useNavigate();
   const orgs = useDataStore((s) => s.orgs);
-  const discoverable = useDataStore((s) => s.discoverableOrgs);
   const me = useMe();
 
   return (
@@ -41,9 +40,6 @@ export default function OrgPicker() {
       </div>
       <div className="flex gap-2 mt-4">
         <Button variant="secondary" onClick={() => navigate('/orgs/new')}>Create a new organization</Button>
-        {discoverable.length > 0 && (
-          <Button variant="secondary" onClick={() => navigate('/orgs/join')}>Join an organization</Button>
-        )}
       </div>
     </AuthLayout>
   );

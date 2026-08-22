@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Drawer } from '@/components/ui/Drawer';
 import { Select, TextInput, TextArea } from '@/components/ui/Field';
 import { Pill } from '@/components/ui/Pill';
@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { useOrg, useProject, usePermissions, useMe } from '@/hooks/useScope';
 import { useDataStore } from '@/store/dataStore';
-import { PEOPLE } from '@/data/people';
+import { usePeopleStore } from '@/store/peopleStore';
+import { timeAgo } from '@/lib/format';
 import type { IssueType, Priority } from '@/types';
 
 export function IssueDetailDrawer() {
@@ -22,9 +23,16 @@ export function IssueDetailDrawer() {
   const removeCc = useDataStore((s) => s.removeCc);
   const [commentDraft, setCommentDraft] = useState('');
   const [labelsDraft, setLabelsDraft] = useState<string | null>(null);
+  const ACTIVITY_PAGE_SIZE = 8;
+  const [activityVisible, setActivityVisible] = useState(ACTIVITY_PAGE_SIZE);
+  const people = usePeopleStore((s) => s.people);
 
   const issueId = params.get('issue');
   const issue = project?.issues.find((i) => i.id === issueId);
+
+  useEffect(() => {
+    setActivityVisible(ACTIVITY_PAGE_SIZE);
+  }, [issueId]);
 
   const close = () => {
     const next = new URLSearchParams(params);
@@ -88,11 +96,11 @@ export function IssueDetailDrawer() {
           disabled={!canEdit}
           onChange={(e) => {
             const val = e.target.value === 'unassigned' ? null : e.target.value;
-            patch({ assignee: val }, val ? `reassigned to ${PEOPLE[val].name}` : 'unassigned');
+            patch({ assignee: val }, val ? `reassigned to ${people[val]?.name}` : 'unassigned');
           }}
         >
           <option value="unassigned">Unassigned</option>
-          {project.members.map((m) => <option key={m.userId} value={m.userId}>{PEOPLE[m.userId].name}</option>)}
+          {project.members.map((m) => <option key={m.userId} value={m.userId}>{people[m.userId]?.name}</option>)}
         </Select>
 
         <div className="text-[11px] font-semibold tracking-wider uppercase text-neutral-600">Priority</div>
@@ -174,7 +182,7 @@ export function IssueDetailDrawer() {
           {issue.cc.map((uid) => (
             <div key={uid} className="flex items-center gap-1.5 pl-0.5 pr-1.5 py-0.5 rounded-full bg-neutral-200">
               <Avatar userId={uid} size="xs" tone="accent2" />
-              <div className="text-[12.5px] whitespace-nowrap">{PEOPLE[uid].name}</div>
+              <div className="text-[12.5px] whitespace-nowrap">{people[uid]?.name}</div>
               {canComment && (
                 <button onClick={() => removeCc(org.id, project.id, issue.id, uid)} className="text-[11px] text-neutral-600 hover:text-accent-700 cursor-pointer px-0.5">
                   ✕
@@ -189,7 +197,7 @@ export function IssueDetailDrawer() {
               className="h-7 border border-line rounded-full px-2.5 text-[12.5px] bg-canvas"
             >
               <option value="">+ Cc someone</option>
-              {ccCandidates.map((uid) => <option key={uid} value={uid}>{PEOPLE[uid].name}</option>)}
+              {ccCandidates.map((uid) => <option key={uid} value={uid}>{people[uid]?.name}</option>)}
             </select>
           )}
         </div>
@@ -202,8 +210,8 @@ export function IssueDetailDrawer() {
             <Avatar userId={c.author} size="md" />
             <div className="flex-1 min-w-0">
               <div className="flex gap-2 items-baseline mb-0.5">
-                <div className="text-[13.5px] font-semibold">{PEOPLE[c.author]?.name}</div>
-                <div className="text-[11.5px] text-neutral-600">{c.at}</div>
+                <div className="text-[13.5px] font-semibold">{people[c.author]?.name}</div>
+                <div className="text-[11.5px] text-neutral-600">{timeAgo(c.at)}</div>
               </div>
               <div className="text-sm leading-relaxed text-balance">{c.body}</div>
             </div>
@@ -236,12 +244,20 @@ export function IssueDetailDrawer() {
       )}
 
       <div className="text-[11px] font-semibold tracking-wider uppercase text-neutral-600 mb-2.5">Activity</div>
-      <div className="flex flex-col gap-2">
-        {issue.activity.map((a) => (
+      <div
+        className="flex flex-col gap-2 max-h-[280px] overflow-y-auto pr-1"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          if (el.scrollTop + el.clientHeight >= el.scrollHeight - 24) {
+            setActivityVisible((v) => Math.min(v + ACTIVITY_PAGE_SIZE, issue.activity.length));
+          }
+        }}
+      >
+        {issue.activity.slice(0, activityVisible).map((a) => (
           <div key={a.id} className="flex gap-2.5 items-baseline">
             <div className="w-[7px] h-[7px] rounded-full bg-neutral-400 mt-1.5 flex-none" />
-            <div className="flex-1 text-[13px] text-neutral-800 leading-relaxed">{PEOPLE[a.actor]?.name.split(' ')[0]} {a.text}</div>
-            <div className="text-[11.5px] text-neutral-600 flex-none">{a.at}</div>
+            <div className="flex-1 text-[13px] text-neutral-800 leading-relaxed">{people[a.actor]?.name.split(' ')[0]} {a.text}</div>
+            <div className="text-[11.5px] text-neutral-600 flex-none">{timeAgo(a.at)}</div>
           </div>
         ))}
       </div>

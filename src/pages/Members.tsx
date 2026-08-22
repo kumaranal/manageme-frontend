@@ -5,7 +5,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Select } from '@/components/ui/Field';
 import { useUiStore } from '@/store/uiStore';
 import { useDataStore } from '@/store/dataStore';
-import { PEOPLE } from '@/data/people';
+import { usePeopleStore } from '@/store/peopleStore';
+import { timeAgo } from '@/lib/format';
 import type { OrgRole } from '@/types';
 
 export default function Members() {
@@ -17,6 +18,7 @@ export default function Members() {
   const removeMember = useDataStore((s) => s.removeMember);
   const revokeInvite = useDataStore((s) => s.revokeInvite);
   const toast = useDataStore((s) => s.toast);
+  const people = usePeopleStore((s) => s.people);
   if (!org) return null;
 
   const adminCount = org.members.filter((m) => m.role === 'ORG_ADMIN').length;
@@ -29,7 +31,7 @@ export default function Members() {
           {isOrgAdmin && <Button variant="secondary" size="sm" onClick={() => openModal('inviteOpen')}>Invite people</Button>}
         </div>
         {org.members.map((m) => {
-          const person = PEOPLE[m.userId];
+          const person = people[m.userId];
           const inProjects = org.projects.filter((pr) => pr.members.some((x) => x.userId === m.userId)).map((pr) => pr.key);
           const lastAdmin = m.role === 'ORG_ADMIN' && adminCount === 1;
           const editable = isOrgAdmin && !lastAdmin;
@@ -75,10 +77,13 @@ export default function Members() {
           <div key={i.id} className="flex flex-wrap items-center gap-3 px-4 sm:px-6 py-3 border-t border-line">
             <div className="flex-1 min-w-[160px]">
               <div className="text-sm font-semibold">{i.email}</div>
-              <div className="text-[12.5px] text-neutral-600">{i.role.toLowerCase()} · {i.at} · expires in 5 days</div>
+              <div className="text-[12.5px] text-neutral-600">{i.role.toLowerCase()} · sent {timeAgo(i.at)}</div>
             </div>
             <button
-              onClick={() => toast(`Invite link copied · /invitations/${i.token}/accept`)}
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/invite/${i.token}`);
+                toast('Invite link copied');
+              }}
               className="h-[34px] px-4 rounded-full border border-line text-[13px] font-semibold cursor-pointer hover:bg-ink/7"
             >
               Copy link

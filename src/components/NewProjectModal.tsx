@@ -19,14 +19,13 @@ export function NewProjectModal() {
 
   const handleClose = () => { close('newProjectOpen'); setName(''); };
 
-  const submit = () => {
+  const submit = async () => {
     if (!org) return;
     const trimmed = name.trim();
     if (!trimmed) { toast('Give the project a name', 'bad'); return; }
-    createProject(org.id, trimmed);
-    const key = deriveProjectKey(trimmed, org.projects.map((p) => p.key));
+    const project = await createProject(org.id, trimmed);
     handleClose();
-    navigate(`/o/${org.slug}/p/${key}/board`);
+    if (project) navigate(`/o/${org.slug}/p/${project.key}/board`);
   };
 
   if (!open || !org) return null;

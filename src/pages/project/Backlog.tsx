@@ -5,12 +5,13 @@ import { FilterDropdown } from '@/components/FilterDropdown';
 import { Pill } from '@/components/ui/Pill';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDue } from '@/lib/format';
-import { PEOPLE } from '@/data/people';
+import { usePeopleStore } from '@/store/peopleStore';
 
 export default function Backlog() {
   const org = useOrg();
   const project = useProject();
   const me = useMe();
+  const people = usePeopleStore((s) => s.people);
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [statusIds, setStatusIds] = useState<string[]>([]);
@@ -29,9 +30,9 @@ export default function Backlog() {
   const assigneeOptions = useMemo(() => {
     if (!project) return [];
     const opts = [{ id: 'unassigned', label: 'Unassigned' }, { id: me, label: 'Me' }];
-    project.members.filter((m) => m.userId !== me).forEach((m) => opts.push({ id: m.userId, label: PEOPLE[m.userId].name.split(' ')[0] }));
+    project.members.filter((m) => m.userId !== me).forEach((m) => opts.push({ id: m.userId, label: (people[m.userId]?.name ?? '').split(' ')[0] }));
     return opts;
-  }, [project, me]);
+  }, [project, me, people]);
   const sprintOptions = useMemo(() => [{ id: 'none', label: 'No sprint' }, ...(project?.sprints.map((s) => ({ id: s.id, label: s.name })) ?? [])], [project]);
 
   if (!org || !project) return null;
@@ -75,7 +76,7 @@ export default function Backlog() {
               <div className="flex-1 min-w-[200px] truncate">{r.title}</div>
               <div className="w-[104px] flex-none"><Pill>{status?.name}</Pill></div>
               <div className="w-16 flex-none text-xs font-semibold text-neutral-600">{r.priority}</div>
-              <div className="w-[110px] flex-none text-[13px] text-neutral-800 truncate">{r.assignee ? PEOPLE[r.assignee].name : '—'}</div>
+              <div className="w-[110px] flex-none text-[13px] text-neutral-800 truncate">{r.assignee ? (people[r.assignee]?.name ?? '—') : '—'}</div>
               <div className="w-[90px] flex-none text-xs text-neutral-600 truncate">{sprint ? sprint.name : 'Backlog'}</div>
               <div className="w-[72px] flex-none text-[12.5px] text-neutral-600">{formatDue(r.due)}</div>
             </div>

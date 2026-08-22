@@ -4,7 +4,9 @@ import { Drawer } from '@/components/ui/Drawer';
 import { Select, TextArea } from '@/components/ui/Field';
 import { useOrg, useProject, usePermissions } from '@/hooks/useScope';
 import { useDataStore } from '@/store/dataStore';
-import { STORE_KIND_LABEL, PEOPLE } from '@/data/people';
+import { usePeopleStore } from '@/store/peopleStore';
+import { STORE_KIND_LABEL } from '@/data/people';
+import { timeAgo } from '@/lib/format';
 import type { StoreKind } from '@/types';
 
 export function StoreItemDrawer() {
@@ -20,6 +22,7 @@ export function StoreItemDrawer() {
   const [originalTitle, setOriginalTitle] = useState('');
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
+  const people = usePeopleStore((s) => s.people);
 
   const itemId = params.get('store');
   const item = project?.store.find((s) => s.id === itemId);
@@ -53,7 +56,7 @@ export function StoreItemDrawer() {
             <option value="NOTE">Note</option>
             <option value="LINK">Link</option>
           </Select>
-          <div className="text-[11.5px] text-neutral-600">updated {item.updatedAt} by {PEOPLE[item.updatedBy]?.name.split(' ')[0]}</div>
+          <div className="text-[11.5px] text-neutral-600">updated {timeAgo(item.updatedAt)} by {people[item.updatedBy]?.name.split(' ')[0]}</div>
           {canEdit && (
             <button
               onClick={() => { deleteStoreItem(org.id, project.id, item.id); close(); }}
@@ -97,8 +100,8 @@ export function StoreItemDrawer() {
         <div className="flex flex-col gap-1.5">
           {item.history.map((h, idx) => (
             <div key={idx} className="flex gap-2 text-[12.5px]">
-              <div className="flex-1 text-neutral-800">{PEOPLE[h.actor]?.name.split(' ')[0]} {h.text}</div>
-              <div className="text-neutral-600">{h.at}</div>
+              <div className="flex-1 text-neutral-800">{people[h.actor]?.name.split(' ')[0]} {h.text}</div>
+              <div className="text-neutral-600">{timeAgo(h.at)}</div>
             </div>
           ))}
           {item.history.length === 0 && <div className="text-[12.5px] text-neutral-600">No changes yet.</div>}
