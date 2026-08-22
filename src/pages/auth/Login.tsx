@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { AuthLayout } from '@/layout/AuthLayout';
 import { TextInput } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
+import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { useAuthStore } from '@/store/authStore';
 import { useDataStore } from '@/store/dataStore';
 
@@ -45,6 +46,7 @@ export default function Login() {
     <AuthLayout>
       <h2 className="font-heading text-[32px] leading-tight mb-2">manage-me</h2>
       <p className="text-neutral-600 mb-6">Sign in to your organizations.</p>
+      <OAuthButtons />
       <div className="mb-3">
         <div className="text-[12px] font-semibold tracking-wider uppercase text-neutral-600 mb-1">Email</div>
         <TextInput value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />

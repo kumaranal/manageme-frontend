@@ -139,3 +139,96 @@ export interface DiscoverableOrg {
   slug: string;
   initial: string;
 }
+
+export type BillingCurrency = 'INR' | 'USD';
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  description: string;
+  periodDays: number;
+  priceInrPaise: number;
+  priceUsdCents: number;
+  active: boolean;
+}
+
+export type CheckoutSessionStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'EXPIRED';
+
+export interface CheckoutStatusResult {
+  status: CheckoutSessionStatus;
+  createdOrgId: string | null;
+  renewOrgId: string | null;
+}
+
+export type CheckoutStartResult =
+  | { gateway: 'STRIPE'; checkoutSessionId: string; checkoutUrl: string; amount: number; currency: BillingCurrency }
+  | { gateway: 'RAZORPAY'; checkoutSessionId: string; razorpayKeyId: string; orderId: string; amount: number; currency: BillingCurrency }
+  | { gateway: 'FREE'; checkoutSessionId: string; amount: number; currency: BillingCurrency; status: CheckoutSessionStatus; createdOrgId: string | null; renewOrgId: string | null };
+
+export type PaymentGateway = 'RAZORPAY' | 'STRIPE';
+export type CouponDiscountType = 'PERCENT' | 'FIXED';
+
+export interface Coupon {
+  id: string;
+  code: string;
+  discountType: CouponDiscountType;
+  percentOff: number | null;
+  fixedOffInrPaise: number | null;
+  fixedOffUsdCents: number | null;
+  maxRedemptions: number | null;
+  timesRedeemed: number;
+  active: boolean;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface AdminOverview {
+  organizations: { total: number; active: number; suspended: number; newThisMonth: number };
+  users: { total: number };
+  subscriptions: { active: number; expired: number };
+  revenue: { currency: BillingCurrency; totalAmount: number; paymentCount: number }[];
+  coupons: { totalRedemptions: number };
+}
+
+export interface AdminOrgRow {
+  id: string;
+  name: string;
+  slug: string;
+  status: OrgStatus;
+  createdAt: string;
+  memberCount: number;
+  projectCount: number;
+  plan: { id: string; name: string } | null;
+  subscriptionActive: boolean;
+  currentPeriodEnd: string | null;
+}
+
+export interface AdminUserRow {
+  id: string;
+  name: string;
+  email: string;
+  isSuperadmin: boolean;
+  createdAt: string;
+  orgCount: number;
+}
+
+export interface AdminPayment {
+  id: string;
+  orgId: string;
+  subscriptionId: string;
+  userId: string;
+  gateway: PaymentGateway;
+  currency: BillingCurrency;
+  amount: number;
+  gatewayPaymentId: string;
+  createdAt: string;
+  org: { id: string; name: string; slug: string };
+  user: { id: string; name: string; email: string };
+}

@@ -1,17 +1,48 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthLayout } from '@/layout/AuthLayout';
-import { TextInput } from '@/components/ui/Field';
+import { TextInput, Label } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { useDataStore } from '@/store/dataStore';
-import { slugify } from '@/lib/format';
+import { useBillingStore } from '@/store/billingStore';
+import { slugify, formatMoney } from '@/lib/format';
+import { openRazorpayCheckout } from '@/lib/razorpay';
+import { ApiError } from '@/lib/api';
+import type { BillingCurrency } from '@/types';
+import { cn } from '@/lib/cn';
 
 export default function NewOrg() {
   const [name, setName] = useState('');
+  const [currency, setCurrency] = useState<BillingCurrency>('USD');
+  const [planId, setPlanId] = useState('');
+  const [couponCode, setCouponCode] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
-  const createOrg = useDataStore((s) => s.createOrg);
-  const toast = useDataStore((s) => s.toast);
   const orgs = useDataStore((s) => s.orgs);
+  const toast = useDataStore((s) => s.toast);
+  const fetchOrgs = useDataStore((s) => s.fetchOrgs);
+  const plans = useBillingStore((s) => s.plans);
+  const plansLoaded = useBillingStore((s) => s.plansLoaded);
+  const fetchPlans = useBillingStore((s) => s.fetchPlans);
+  const createOrgCheckout = useBillingStore((s) => s.createOrgCheckout);
+  const verifyRazorpayPayment = useBillingStore((s) => s.verifyRazorpayPayment);
+
+  useEffect(() => {
+    if (!plansLoaded) fetchPlans().catch(() => toast('Could not load plans', 'bad'));
+  }, [plansLoaded, fetchPlans, toast]);
+
+  const selectedPlanId = planId || plans[0]?.id || '';
+  const selectedPlan = plans.find((p) => p.id === selectedPlanId);
+  const isFreePlan = selectedPlan
+    ? (currency === 'INR' ? selectedPlan.priceInrPaise : selectedPlan.priceUsdCents) === 0
+    : false;
+
+  const enterCreatedOrg = async (createdOrgId: string) => {
+    await fetchOrgs();
+    const org = useDataStore.getState().orgs.find((o) => o.id === createdOrgId);
+    if (org) navigate(`/o/${org.slug}/my-work`);
+    else navigate('/orgs');
+  };
 
   const submit = async () => {
     const trimmed = name.trim();
@@ -19,22 +50,147 @@ export default function NewOrg() {
       toast('Give the organization a name', 'bad');
       return;
     }
-    const org = await createOrg(trimmed);
-    if (org) navigate(`/o/${org.slug}/my-work`);
+    if (!selectedPlanId) {
+      toast('Choose a plan', 'bad');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const result = await createOrgCheckout({
+        orgName: trimmed,
+        planId: selectedPlanId,
+        currency,
+        couponCode: couponCode.trim() || undefined,
+      });
+
+      if (result.gateway === 'FREE') {
+        if (result.status === 'COMPLETED' && result.createdOrgId) {
+          toast(`${trimmed} created · you are its org admin`);
+          await enterCreatedOrg(result.createdOrgId);
+        } else {
+          toast('Could not create the organization', 'bad');
+        }
+        return;
+      }
+
+      if (result.gateway === 'STRIPE') {
+        window.location.href = result.checkoutUrl;
+        return;
+      }
+
+      const payment = await openRazorpayCheckout({
+        keyId: result.razorpayKeyId,
+        orderId: result.orderId,
+        amount: result.amount,
+        currency: result.currency,
+        name: 'manage-me',
+        description: `Organization: ${trimmed}`,
+      });
+      const status = await verifyRazorpayPayment({
+        checkoutSessionId: result.checkoutSessionId,
+        razorpayOrderId: payment.razorpay_order_id,
+        razorpayPaymentId: payment.razorpay_payment_id,
+        razorpaySignature: payment.razorpay_signature,
+      });
+      if (status.status === 'COMPLETED' && status.createdOrgId) {
+        toast(`${trimmed} created · you are its org admin`);
+        await enterCreatedOrg(status.createdOrgId);
+      } else {
+        toast('Payment could not be confirmed', 'bad');
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message === 'cancelled') {
+        // user closed the Razorpay modal — no toast needed
+      } else {
+        const message = e instanceof ApiError ? e.message : 'Something went wrong';
+        toast(message, 'bad');
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <AuthLayout>
+    <AuthLayout width={460}>
       <h2 className="font-heading text-[32px] leading-tight mb-2">New organization</h2>
-      <p className="text-neutral-600 mb-6">You become its owner. Everything you create afterwards lives inside it.</p>
-      <div className="mb-2">
-        <div className="text-[12px] font-semibold tracking-wider uppercase text-neutral-600 mb-1">Name</div>
-        <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Okonjo & Partners" onKeyDown={(e) => e.key === 'Enter' && submit()} />
+      <p className="text-neutral-600 mb-6">
+        You become its owner. {isFreePlan ? 'This plan is free — no payment needed.' : 'Creating an organization starts a paid subscription.'}
+      </p>
+
+      <div className="mb-4">
+        <Label>Name</Label>
+        <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Okonjo & Partners" />
+        <div className="text-[12.5px] text-neutral-600 mt-1.5">
+          {name.trim() ? `manage.me/o/${slugify(name)}` : 'The slug is derived from the name.'}
+        </div>
       </div>
-      <div className="text-[12.5px] text-neutral-600 mb-6">
-        {name.trim() ? `manage.me/o/${slugify(name)}` : 'The slug is derived from the name.'}
+
+      <div className="mb-4">
+        <Label>Currency</Label>
+        <div className="flex gap-2">
+          {(['USD', 'INR'] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCurrency(c)}
+              className={cn(
+                'h-9 px-4 rounded-full text-[13.5px] font-semibold border cursor-pointer transition-colors',
+                currency === c ? 'bg-accent-200 border-accent text-accent-700' : 'border-line hover:bg-ink/7',
+              )}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
       </div>
-      <Button variant="primary" className="w-full" onClick={submit}>Create organization</Button>
+
+      <div className="mb-4">
+        <Label>Plan</Label>
+        {!plansLoaded ? (
+          <div className="text-sm text-neutral-600">Loading plans…</div>
+        ) : plans.length === 0 ? (
+          <div className="text-sm text-neutral-600">No plans available right now.</div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {plans.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPlanId(p.id)}
+                className={cn(
+                  'flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left cursor-pointer transition-colors',
+                  selectedPlanId === p.id ? 'border-accent bg-accent-200/40' : 'border-line hover:bg-ink/7',
+                )}
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold truncate">{p.name}</div>
+                  {p.description && <div className="text-[12.5px] text-neutral-600 truncate">{p.description}</div>}
+                </div>
+                <div className="text-sm font-semibold whitespace-nowrap">
+                  {(currency === 'INR' ? p.priceInrPaise : p.priceUsdCents) === 0
+                    ? 'Free'
+                    : (
+                      <>
+                        {formatMoney(currency === 'INR' ? p.priceInrPaise : p.priceUsdCents, currency)}
+                        <span className="text-neutral-600 font-normal"> / {p.periodDays}d</span>
+                      </>
+                    )}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mb-6">
+        <Label>Coupon code (optional)</Label>
+        <TextInput value={couponCode} onChange={(e) => setCouponCode(e.target.value)} placeholder="SAVE20" />
+      </div>
+
+      <Button variant="primary" className="w-full" onClick={submit} disabled={submitting || !plansLoaded || plans.length === 0}>
+        {submitting ? (isFreePlan ? 'Creating…' : 'Starting checkout…') : (isFreePlan ? 'Create organization' : 'Continue to payment')}
+      </Button>
       <button onClick={() => navigate(orgs.length ? '/orgs' : '/login')} className="block w-full text-center mt-4 text-[13px] text-accent-700 font-semibold cursor-pointer">
         Back
       </button>

@@ -40,6 +40,14 @@ export function addDaysIso(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+export function formatMoney(minorUnits: number, currency: 'INR' | 'USD'): string {
+  return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: minorUnits % 100 === 0 ? 0 : 2,
+  }).format(minorUnits / 100);
+}
+
 export function firstName(fullName: string): string {
   return fullName.split(' ')[0];
 }

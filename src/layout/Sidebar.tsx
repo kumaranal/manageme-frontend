@@ -18,6 +18,7 @@ export function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const signOut = useAuthStore((s) => s.signOut);
+  const isSuperadmin = useAuthStore((s) => s.profile?.isSuperadmin);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const person = usePeopleStore((s) => s.people[me]);
@@ -98,6 +99,17 @@ export function Sidebar() {
                 {o.id === org.id && <div className="w-2 h-2 rounded-full bg-accent" />}
               </button>
             ))}
+            {isSuperadmin && (
+              <>
+                <div className="border-t border-line" />
+                <button
+                  onClick={() => { setMenuOpen(false); closeMobileNav(); navigate('/admin'); }}
+                  className="w-full px-4 py-2.5 text-[13.5px] font-semibold text-accent-700 cursor-pointer hover:bg-neutral-200 text-left"
+                >
+                  Platform admin
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
