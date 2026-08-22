@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase';
 import { api } from '@/lib/api';
 import type { User } from '@/types';
 
+export type OAuthProvider = 'google' | 'github' | 'azure';
+
 interface AuthState {
   status: 'loading' | 'ready';
   session: Session | null;
@@ -14,6 +16,7 @@ interface AuthState {
   init: () => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithOAuth: (provider: OAuthProvider) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -68,6 +71,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     const { data } = await supabase.auth.getSession();
     const profile = await loadProfile();
     set({ session: data.session, profile, isAuthenticated: true, userId: profile.id });
+  },
+
+  signInWithOAuth: async (provider) => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: `${window.location.origin}/orgs` },
+    });
+    if (error) throw error;
+    // Browser navigates away to the provider's consent screen; state updates
+    // on return via the onAuthStateChange listener registered in init().
   },
 
   signOut: async () => {

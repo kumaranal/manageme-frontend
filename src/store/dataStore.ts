@@ -27,7 +27,6 @@ interface DataState {
   refreshOrg: (orgId: string) => Promise<void>;
   reset: () => void;
 
-  createOrg: (name: string) => Promise<Organization | undefined>;
   joinDiscoverableOrg: (discoverableOrgId: string) => Promise<string | undefined>;
   toggleOrgSuspend: (orgId: string) => Promise<void>;
   updateOrgCapacity: (orgId: string, hours: number) => Promise<void>;
@@ -132,16 +131,6 @@ export const useDataStore = create<DataState>((set, get) => {
     },
 
     reset: () => set({ orgs: [], discoverableOrgs: [], toasts: [], loaded: false }),
-
-    createOrg: async (name) => {
-      let created: Organization | undefined;
-      await run(async () => {
-        created = await api.post<Organization>('/organizations', { name });
-        await usePeopleStore.getState().ensure(collectPersonIds(created));
-        set((s) => ({ orgs: [...s.orgs, created!] }));
-      }, `${name} created · you are its org admin`);
-      return created;
-    },
 
     joinDiscoverableOrg: async (discoverableOrgId) => {
       const found = get().discoverableOrgs.find((o) => o.id === discoverableOrgId);

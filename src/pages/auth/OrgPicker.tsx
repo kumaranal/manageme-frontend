@@ -3,12 +3,14 @@ import { AuthLayout } from '@/layout/AuthLayout';
 import { OrgAvatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { useDataStore } from '@/store/dataStore';
+import { useAuthStore } from '@/store/authStore';
 import { useMe } from '@/hooks/useScope';
 import { orgRole } from '@/lib/permissions';
 
 export default function OrgPicker() {
   const navigate = useNavigate();
   const orgs = useDataStore((s) => s.orgs);
+  const isSuperadmin = useAuthStore((s) => s.profile?.isSuperadmin);
   const me = useMe();
 
   return (
@@ -40,6 +42,9 @@ export default function OrgPicker() {
       </div>
       <div className="flex gap-2 mt-4">
         <Button variant="secondary" onClick={() => navigate('/orgs/new')}>Create a new organization</Button>
+        {isSuperadmin && (
+          <Button variant="secondary" onClick={() => navigate('/admin')}>Platform admin</Button>
+        )}
       </div>
     </AuthLayout>
   );
