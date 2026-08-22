@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+// import { useNavigate } from "react-router-dom";
 import { useAdminStore, adminErrorMessage } from "@/store/adminStore";
 import { useDataStore } from "@/store/dataStore";
 import { TextInput } from "@/components/ui/Field";
@@ -12,7 +12,7 @@ export default function AdminOrganizations() {
   const fetchOrganizations = useAdminStore((s) => s.fetchOrganizations);
   const toggleOrgSuspend = useDataStore((s) => s.toggleOrgSuspend);
   const toast = useDataStore((s) => s.toast);
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
 
