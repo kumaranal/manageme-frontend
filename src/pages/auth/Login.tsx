@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { AuthLayout } from '@/layout/AuthLayout';
-import { TextInput } from '@/components/ui/Field';
+import { TextInput, PasswordInput } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { useAuthStore } from '@/store/authStore';
@@ -54,7 +54,7 @@ export default function Login() {
       </div>
       <div className="mb-6">
         <div className="text-[12px] font-semibold tracking-wider uppercase text-neutral-600 mb-1">Password</div>
-        <TextInput type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
+        <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
       </div>
       <Button variant="primary" className="w-full" onClick={submit} disabled={submitting}>
         {submitting ? 'Signing in…' : 'Sign in'}

@@ -1,10 +1,30 @@
+import { useState } from 'react';
 import type { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes, ReactNode } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 const baseInput = 'w-full h-[42px] border border-line rounded-full bg-canvas px-4 text-sm focus:outline-none focus:border-accent transition-colors placeholder:text-neutral-500';
 
 export function TextInput({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(baseInput, className)} {...rest} />;
+}
+
+export function PasswordInput({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <input type={visible ? 'text' : 'password'} className={cn(baseInput, 'pr-11', className)} {...rest} />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setVisible((v) => !v)}
+        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-ink transition-colors cursor-pointer"
+        aria-label={visible ? 'Hide password' : 'Show password'}
+      >
+        {visible ? <EyeOff size={16} /> : <Eye size={16} />}
+      </button>
+    </div>
+  );
 }
 
 export function TextArea({ className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
