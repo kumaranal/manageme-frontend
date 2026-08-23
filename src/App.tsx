@@ -7,6 +7,8 @@ import { useDataStore } from '@/store/dataStore';
 import Login from '@/pages/auth/Login';
 
 const Signup = lazy(() => import('@/pages/auth/Signup'));
+const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
+const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 const InviteAccept = lazy(() => import('@/pages/auth/InviteAccept'));
 const OrgPicker = lazy(() => import('@/pages/auth/OrgPicker'));
 const NewOrg = lazy(() => import('@/pages/auth/NewOrg'));
@@ -73,6 +75,8 @@ export default function App() {
       <Route path="/" element={<Navigate to={isAuthenticated ? (isSuperadmin ? '/admin' : '/orgs') : '/login'} replace />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/invite/:token" element={<InviteAccept />} />
       <Route path="/orgs" element={<RequireAuth><OrgPicker /></RequireAuth>} />
       <Route path="/orgs/new" element={<RequireAuth><NewOrg /></RequireAuth>} />

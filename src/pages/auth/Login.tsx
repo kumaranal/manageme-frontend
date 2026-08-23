@@ -52,11 +52,14 @@ export default function Login() {
         <div className="text-[12px] font-semibold tracking-wider uppercase text-neutral-600 mb-1">Email</div>
         <TextInput value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
       </div>
-      <div className="mb-6">
-        <div className="text-[12px] font-semibold tracking-wider uppercase text-neutral-600 mb-1">Password</div>
+      <div className="mb-2">
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-[12px] font-semibold tracking-wider uppercase text-neutral-600">Password</div>
+          <Link to="/forgot-password" className="text-[12px] text-accent-700 font-semibold no-underline">Forgot password?</Link>
+        </div>
         <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
       </div>
-      <Button variant="primary" className="w-full" onClick={submit} disabled={submitting}>
+      <Button variant="primary" className="w-full mt-4" onClick={submit} disabled={submitting}>
         {submitting ? 'Signing in…' : 'Sign in'}
       </Button>
       <div className="flex gap-4 justify-center mt-4">
