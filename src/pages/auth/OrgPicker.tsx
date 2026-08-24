@@ -11,10 +11,18 @@ export default function OrgPicker() {
   const navigate = useNavigate();
   const orgs = useDataStore((s) => s.orgs);
   const isSuperadmin = useAuthStore((s) => s.profile?.isSuperadmin);
+  const signOut = useAuthStore((s) => s.signOut);
   const me = useMe();
 
   return (
-    <AuthLayout width={492}>
+    <AuthLayout
+      width={492}
+      topRight={
+        <Button variant="secondary" size="sm" onClick={() => { signOut(); navigate('/login'); }}>
+          Sign out
+        </Button>
+      }
+    >
       <h2 className="font-heading text-[32px] leading-tight mb-2">Choose an organization</h2>
       <p className="text-neutral-600 mb-6">
         Your account has {orgs.length} membership{orgs.length === 1 ? '' : 's'}. Each one is a separate tenant — nothing crosses between them.
