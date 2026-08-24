@@ -4,6 +4,7 @@ import { AuthLayout } from '@/layout/AuthLayout';
 import { TextInput, Label } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { useDataStore } from '@/store/dataStore';
+import { useAuthStore } from '@/store/authStore';
 import { useBillingStore } from '@/store/billingStore';
 import { slugify, formatMoney } from '@/lib/format';
 import { openRazorpayCheckout } from '@/lib/razorpay';
@@ -26,6 +27,7 @@ export default function NewOrg() {
   const fetchPlans = useBillingStore((s) => s.fetchPlans);
   const createOrgCheckout = useBillingStore((s) => s.createOrgCheckout);
   const verifyRazorpayPayment = useBillingStore((s) => s.verifyRazorpayPayment);
+  const signOut = useAuthStore((s) => s.signOut);
 
   useEffect(() => {
     if (!plansLoaded) fetchPlans().catch(() => toast('Could not load plans', 'bad'));
@@ -112,7 +114,14 @@ export default function NewOrg() {
   };
 
   return (
-    <AuthLayout width={460}>
+    <AuthLayout
+      width={460}
+      topRight={
+        <Button variant="secondary" size="sm" onClick={() => { signOut(); navigate('/login'); }}>
+          Sign out
+        </Button>
+      }
+    >
       <h2 className="font-heading text-[32px] leading-tight mb-2">New organization</h2>
       <p className="text-neutral-600 mb-6">
         You become its owner. {isFreePlan ? 'This plan is free — no payment needed.' : 'Creating an organization starts a paid subscription.'}
