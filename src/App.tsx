@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useDataStore } from '@/store/dataStore';
 
 import Login from '@/pages/auth/Login';
+import Landing from '@/pages/Landing';
 
 const Signup = lazy(() => import('@/pages/auth/Signup'));
 const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
@@ -72,7 +73,10 @@ export default function App() {
   return (
     <Suspense fallback={<div className="h-screen w-full flex items-center justify-center bg-canvas text-neutral-600">Loading…</div>}>
     <Routes>
-      <Route path="/" element={<Navigate to={isAuthenticated ? (isSuperadmin ? '/admin' : '/orgs') : '/login'} replace />} />
+      <Route
+        path="/"
+        element={isAuthenticated ? <Navigate to={isSuperadmin ? '/admin' : '/orgs'} replace /> : <Landing />}
+      />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
