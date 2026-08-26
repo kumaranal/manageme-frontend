@@ -6,6 +6,7 @@ import { Pill } from '@/components/ui/Pill';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { File as FileIcon } from 'lucide-react';
+import { cn } from '@/lib/cn';
 import { useOrg, useProject, usePermissions, useMe } from '@/hooks/useScope';
 import { useDataStore } from '@/store/dataStore';
 import { usePeopleStore } from '@/store/peopleStore';
@@ -109,6 +110,7 @@ export function IssueDetailDrawer() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activityPage, setActivityPage] = useState(0);
   const [commentsPage, setCommentsPage] = useState(0);
+  const [activeTab, setActiveTab] = useState<'comments' | 'activity'>('comments');
   const people = usePeopleStore((s) => s.people);
 
   const issueId = params.get('issue');
@@ -117,6 +119,7 @@ export function IssueDetailDrawer() {
   useEffect(() => {
     setActivityPage(0);
     setCommentsPage(0);
+    setActiveTab('comments');
   }, [issueId]);
 
   // Re-seed the draft whenever a (different) issue is loaded, following
@@ -456,62 +459,88 @@ export function IssueDetailDrawer() {
         <Button variant="secondary" size="sm" onClick={discardChanges} disabled={!dirty || saving}>Discard</Button>
       </div>
 
-      <div className="text-[11px] font-semibold tracking-wider uppercase text-neutral-600 mb-3">Comments</div>
+      <div className="flex items-center gap-1 mb-4 p-1 rounded-full bg-ink/7 w-fit">
+        <button
+          type="button"
+          onClick={() => setActiveTab('comments')}
+          className={cn(
+            'h-7 px-4 rounded-full text-[12px] font-semibold tracking-wider uppercase transition-colors cursor-pointer',
+            activeTab === 'comments' ? 'bg-canvas text-ink shadow-sm' : 'text-neutral-600 hover:text-ink',
+          )}
+        >
+          Comments{issue.comments.length > 0 ? ` (${issue.comments.length})` : ''}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('activity')}
+          className={cn(
+            'h-7 px-4 rounded-full text-[12px] font-semibold tracking-wider uppercase transition-colors cursor-pointer',
+            activeTab === 'activity' ? 'bg-canvas text-ink shadow-sm' : 'text-neutral-600 hover:text-ink',
+          )}
+        >
+          Activity{issue.activity.length > 0 ? ` (${issue.activity.length})` : ''}
+        </button>
+      </div>
 
-      {canComment && (
-        <div className="flex flex-col gap-2.5 mb-5">
-          <TextArea
-            placeholder="Leave a comment"
-            className="min-h-[72px]"
-            value={commentDraft}
-            onChange={(e) => setCommentDraft(e.target.value)}
-          />
-          <div className="flex items-center gap-3">
-            <Button
-              variant="primary"
-              onClick={() => {
-                if (!commentDraft.trim()) return;
-                addComment(org.id, project.id, issue.id, commentDraft.trim());
-                setCommentDraft('');
-              }}
-            >
-              Comment
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-4 mb-1 min-h-[228px]">
-        {issue.comments.slice(commentsPage * PAGE_SIZE, commentsPage * PAGE_SIZE + PAGE_SIZE).map((c) => (
-          <div key={c.id} className="flex gap-2.5">
-            <Avatar userId={c.author} size="md" />
-            <div className="flex-1 min-w-0">
-              <div className="flex gap-2 items-baseline mb-0.5">
-                <div className="text-[13.5px] font-semibold">{people[c.author]?.name}</div>
-                <div className="text-[11.5px] text-neutral-600">{timeAgo(c.at)}</div>
+      {activeTab === 'comments' ? (
+        <>
+          {canComment && (
+            <div className="flex flex-col gap-2.5 mb-5">
+              <TextArea
+                placeholder="Leave a comment"
+                className="min-h-[72px]"
+                value={commentDraft}
+                onChange={(e) => setCommentDraft(e.target.value)}
+              />
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    if (!commentDraft.trim()) return;
+                    addComment(org.id, project.id, issue.id, commentDraft.trim());
+                    setCommentDraft('');
+                  }}
+                >
+                  Comment
+                </Button>
               </div>
-              <div className="text-sm leading-relaxed text-balance">{c.body}</div>
             </div>
-          </div>
-        ))}
-        {issue.comments.length === 0 && <div className="text-[13.5px] text-neutral-600">No comments yet.</div>}
-      </div>
-      <div className="mb-6">
-        <Pager page={commentsPage} total={issue.comments.length} onChange={setCommentsPage} />
-      </div>
+          )}
 
-      <div className="text-[11px] font-semibold tracking-wider uppercase text-neutral-600 mb-2.5">Activity</div>
-      <div className="flex flex-col gap-2">
-        {issue.activity.slice(activityPage * PAGE_SIZE, activityPage * PAGE_SIZE + PAGE_SIZE).map((a) => (
-          <div key={a.id} className="flex gap-2.5 items-baseline">
-            <div className="w-[7px] h-[7px] rounded-full bg-neutral-400 mt-1.5 flex-none" />
-            <div className="flex-1 text-[13px] text-neutral-800 leading-relaxed">{people[a.actor]?.name.split(' ')[0]} {a.text}</div>
-            <div className="text-[11.5px] text-neutral-600 flex-none">{timeAgo(a.at)}</div>
+          <div className="flex flex-col gap-4 mb-1 min-h-[228px]">
+            {issue.comments.slice(commentsPage * PAGE_SIZE, commentsPage * PAGE_SIZE + PAGE_SIZE).map((c) => (
+              <div key={c.id} className="flex gap-2.5">
+                <Avatar userId={c.author} size="md" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex gap-2 items-baseline mb-0.5">
+                    <div className="text-[13.5px] font-semibold">{people[c.author]?.name}</div>
+                    <div className="text-[11.5px] text-neutral-600">{timeAgo(c.at)}</div>
+                  </div>
+                  <div className="text-sm leading-relaxed text-balance">{c.body}</div>
+                </div>
+              </div>
+            ))}
+            {issue.comments.length === 0 && <div className="text-[13.5px] text-neutral-600">No comments yet.</div>}
           </div>
-        ))}
-        {issue.activity.length === 0 && <div className="text-[13.5px] text-neutral-600">No activity yet.</div>}
-      </div>
-      <Pager page={activityPage} total={issue.activity.length} onChange={setActivityPage} />
+          <div className="mb-1">
+            <Pager page={commentsPage} total={issue.comments.length} onChange={setCommentsPage} />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-col gap-2 min-h-[228px]">
+            {issue.activity.slice(activityPage * PAGE_SIZE, activityPage * PAGE_SIZE + PAGE_SIZE).map((a) => (
+              <div key={a.id} className="flex gap-2.5 items-baseline">
+                <div className="w-[7px] h-[7px] rounded-full bg-neutral-400 mt-1.5 flex-none" />
+                <div className="flex-1 text-[13px] text-neutral-800 leading-relaxed">{people[a.actor]?.name.split(' ')[0]} {a.text}</div>
+                <div className="text-[11.5px] text-neutral-600 flex-none">{timeAgo(a.at)}</div>
+              </div>
+            ))}
+            {issue.activity.length === 0 && <div className="text-[13.5px] text-neutral-600">No activity yet.</div>}
+          </div>
+          <Pager page={activityPage} total={issue.activity.length} onChange={setActivityPage} />
+        </>
+      )}
     </Drawer>
   );
 }
