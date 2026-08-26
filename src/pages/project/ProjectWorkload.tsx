@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOrg, useProject, usePermissions } from '@/hooks/useScope';
 import { Avatar } from '@/components/ui/Avatar';
 import { TextInput } from '@/components/ui/Field';
@@ -21,7 +21,25 @@ export default function ProjectWorkload() {
   const people = usePeopleStore((s) => s.people);
   const [period, setPeriod] = useState<WorkloadPeriod>('week');
   const [anchor, setAnchor] = useState(() => new Date());
+  const [hoursDrafts, setHoursDrafts] = useState<Record<string, number | null>>({});
+  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Clear any pending debounced saves on unmount.
+  useEffect(() => () => {
+    Object.values(timersRef.current).forEach(clearTimeout);
+  }, []);
+
   if (!org || !project) return null;
+
+  // Debounce per-member so typing in one row's hours field doesn't fire an
+  // API call per keystroke, and editing multiple rows debounces independently.
+  const setMemberHours = (userId: string, value: number | null) => {
+    setHoursDrafts((prev) => ({ ...prev, [userId]: value }));
+    clearTimeout(timersRef.current[userId]);
+    timersRef.current[userId] = setTimeout(() => {
+      updateProjectMemberHours(org.id, project.id, userId, value);
+    }, 500);
+  };
 
   const issues = openIssuesForWorkload(project);
   const capacityOf = (uid: string) => project.members.find((m) => m.userId === uid)?.weeklyHours ?? org.capacityHoursPerWeek;
@@ -90,9 +108,9 @@ export default function ProjectWorkload() {
                   <div className="order-6 sm:order-none w-[100px] flex-none flex items-center gap-1.5">
                     <TextInput
                       type="number" min={0} step={1}
-                      value={member?.weeklyHours ?? ''}
+                      value={(r.userId in hoursDrafts ? hoursDrafts[r.userId] : member?.weeklyHours) ?? ''}
                       placeholder={String(org.capacityHoursPerWeek)}
-                      onChange={(e) => updateProjectMemberHours(org.id, project.id, r.userId, e.target.value === '' ? null : Number(e.target.value))}
+                      onChange={(e) => setMemberHours(r.userId, e.target.value === '' ? null : Number(e.target.value))}
                       className="w-14 h-[30px] text-[12.5px] px-2"
                     />
                     <div className="text-[11px] text-neutral-600">h/wk</div>

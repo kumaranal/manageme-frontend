@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Modal, ModalTitle, ModalActions } from '@/components/ui/Modal';
-import { TextInput, Select } from '@/components/ui/Field';
+import { TextInput, Select, TextArea } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { useOrg, useProject } from '@/hooks/useScope';
 import { useUiStore } from '@/store/uiStore';
 import { useDataStore } from '@/store/dataStore';
 import { usePeopleStore } from '@/store/peopleStore';
+import { formatBytes } from '@/lib/format';
+import { MAX_ATTACHMENT_SIZE } from '@/lib/storage';
 import type { IssueType, Priority } from '@/types';
 
 function findField(project: NonNullable<ReturnType<typeof useProject>>, id: string) {
@@ -18,10 +20,13 @@ export function CreateIssueModal() {
   const org = useOrg();
   const project = useProject();
   const createIssue = useDataStore((s) => s.createIssue);
+  const addAttachments = useDataStore((s) => s.addAttachments);
   const toast = useDataStore((s) => s.toast);
   const people = usePeopleStore((s) => s.people);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [type, setType] = useState<IssueType>('Task');
   const [statusId, setStatusId] = useState('');
   const [priority, setPriority] = useState<Priority>('Medium');
@@ -30,14 +35,17 @@ export function CreateIssueModal() {
   const [labels, setLabels] = useState('');
   const [estimated, setEstimated] = useState('');
   const [sprintId, setSprintId] = useState('');
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   // Re-seed the draft fields each time the modal opens, following React's
   // "adjusting state during render" pattern instead of an effect.
   const [wasOpen, setWasOpen] = useState(false);
   if (open && !wasOpen && project) {
     setWasOpen(true);
-    setTitle(''); setType('Task'); setStatusId(project.statuses[0]?.id ?? '');
+    setTitle(''); setDescription(''); setType('Task'); setStatusId(project.statuses[0]?.id ?? '');
     setPriority('Medium'); setAssignee('unassigned'); setDue(''); setLabels(''); setEstimated('');
+    setPendingFiles([]);
     const active = project.sprints.find((s) => s.status === 'ACTIVE');
     setSprintId(active ? active.id : '');
   } else if (!open && wasOpen) {
@@ -54,22 +62,35 @@ export function CreateIssueModal() {
 
   const handleClose = () => close('createIssueOpen');
 
-  const submit = () => {
+  const addFiles = (files: FileList | null) => {
+    if (!files) return;
+    const oversized = Array.from(files).filter((f) => f.size > MAX_ATTACHMENT_SIZE);
+    if (oversized.length > 0) toast(`${oversized[0].name} is larger than 25 MB`, 'bad');
+    const accepted = Array.from(files).filter((f) => f.size <= MAX_ATTACHMENT_SIZE);
+    setPendingFiles((prev) => [...prev, ...accepted]);
+  };
+
+  const submit = async () => {
     if (!title.trim()) { toast('The issue needs a title', 'bad'); return; }
     if (assigneeField?.required && assignee === 'unassigned') { toast('Assignee is required for this project', 'bad'); return; }
     if (dueField?.required && !sprintId && !due) { toast('Due date is required for this project', 'bad'); return; }
     if (labelsField?.required && !labels.trim()) { toast('Labels are required for this project', 'bad'); return; }
     if (estimatedField?.required && !estimated) { toast('Estimated hours is required for this project', 'bad'); return; }
 
-    createIssue(org.id, project.id, {
-      title: title.trim(), type, statusId, priority,
+    setSubmitting(true);
+    const issueId = await createIssue(org.id, project.id, {
+      title: title.trim(), description: description.trim(), type, statusId, priority,
       assignee: assignee === 'unassigned' ? null : assignee,
       due: due || null,
       labels: labels.split(',').map((l) => l.trim()).filter(Boolean),
       estimatedHours: estimated === '' ? null : Number(estimated),
       sprintId: sprintId || null,
     });
-    handleClose();
+    if (issueId && pendingFiles.length > 0) {
+      await addAttachments(org.id, project.id, issueId, pendingFiles);
+    }
+    setSubmitting(false);
+    if (issueId) handleClose();
   };
 
   return (
@@ -81,6 +102,10 @@ export function CreateIssueModal() {
       <TextInput
         value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What needs doing?"
         className="h-11 mb-2.5" autoFocus
+      />
+      <TextArea
+        value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Add a description…"
+        className="min-h-[80px] mb-2.5"
       />
       <div className="flex gap-2 mb-2.5 flex-wrap">
         <Select value={type} onChange={(e) => setType(e.target.value as IssueType)} className="w-[110px] h-[38px]">
@@ -125,9 +150,36 @@ export function CreateIssueModal() {
           ))}
         </Select>
       )}
+      <div className="mb-5">
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+        />
+        <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>Attach files</Button>
+        {pendingFiles.length > 0 && (
+          <div className="flex flex-col gap-1.5 mt-2.5">
+            {pendingFiles.map((f, i) => (
+              <div key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 text-[12.5px] bg-ink/5 rounded-lg px-3 py-1.5">
+                <span className="truncate">{f.name} <span className="text-neutral-600">· {formatBytes(f.size)}</span></span>
+                <button
+                  type="button"
+                  onClick={() => setPendingFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="text-neutral-600 hover:text-accent-700 cursor-pointer flex-none"
+                  aria-label={`Remove ${f.name}`}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <ModalActions>
         <Button variant="secondary" onClick={handleClose}>Cancel</Button>
-        <Button variant="primary" onClick={submit}>Create</Button>
+        <Button variant="primary" onClick={submit} disabled={submitting}>{submitting ? 'Saving…' : 'Save'}</Button>
       </ModalActions>
     </Modal>
   );

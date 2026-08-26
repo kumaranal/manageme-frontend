@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useOrg, usePermissions } from "@/hooks/useScope";
 import { Avatar } from "@/components/ui/Avatar";
 import { Pill } from "@/components/ui/Pill";
@@ -30,6 +30,19 @@ export default function OrgWorkload() {
   const people = usePeopleStore((s) => s.people);
   const [period, setPeriod] = useState<WorkloadPeriod>("week");
   const [anchor, setAnchor] = useState(() => new Date());
+  const [capacityDraft, setCapacityDraft] = useState(org?.capacityHoursPerWeek ?? 40);
+
+  // Debounce the capacity save so typing a new number doesn't fire an API
+  // call per keystroke — only after the user pauses for 500ms.
+  useEffect(() => {
+    if (!org || capacityDraft === org.capacityHoursPerWeek) return;
+    const t = setTimeout(() => {
+      updateOrgCapacity(org.id, capacityDraft);
+    }, 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capacityDraft]);
+
   if (!org) return null;
 
   const allIssues = org.projects.flatMap((p) => openIssuesForWorkload(p));
@@ -93,10 +106,8 @@ export default function OrgWorkload() {
             type="number"
             min={1}
             step={1}
-            value={org.capacityHoursPerWeek}
-            onChange={(e) =>
-              updateOrgCapacity(org.id, Number(e.target.value) || 40)
-            }
+            value={capacityDraft}
+            onChange={(e) => setCapacityDraft(Number(e.target.value) || 40)}
             className="w-20 h-[34px] text-[13px]"
           />
         )}

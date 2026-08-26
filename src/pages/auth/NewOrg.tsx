@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthLayout } from '@/layout/AuthLayout';
-import { TextInput, Label } from '@/components/ui/Field';
+import { TextInput, Label, ErrorText } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { useDataStore } from '@/store/dataStore';
 import { useAuthStore } from '@/store/authStore';
@@ -12,11 +12,21 @@ import { ApiError } from '@/lib/api';
 import type { BillingCurrency } from '@/types';
 import { cn } from '@/lib/cn';
 
+const NAME_MAX_LENGTH = 80;
+const COUPON_MAX_LENGTH = 40;
+
+interface FormErrors {
+  name?: string;
+  plan?: string;
+  couponCode?: string;
+}
+
 export default function NewOrg() {
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState<BillingCurrency>('USD');
   const [planId, setPlanId] = useState('');
   const [couponCode, setCouponCode] = useState('');
+  const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
   const orgs = useDataStore((s) => s.orgs);
@@ -46,16 +56,19 @@ export default function NewOrg() {
     else navigate('/orgs');
   };
 
+  const validate = (trimmedName: string): boolean => {
+    const next: FormErrors = {};
+    if (!trimmedName) next.name = 'Give the organization a name';
+    else if (trimmedName.length > NAME_MAX_LENGTH) next.name = `Name must be ${NAME_MAX_LENGTH} characters or fewer`;
+    if (!selectedPlanId) next.plan = 'Choose a plan';
+    if (couponCode.trim().length > COUPON_MAX_LENGTH) next.couponCode = `Coupon code must be ${COUPON_MAX_LENGTH} characters or fewer`;
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
   const submit = async () => {
     const trimmed = name.trim();
-    if (!trimmed) {
-      toast('Give the organization a name', 'bad');
-      return;
-    }
-    if (!selectedPlanId) {
-      toast('Choose a plan', 'bad');
-      return;
-    }
+    if (!validate(trimmed)) return;
 
     setSubmitting(true);
     try {
@@ -104,6 +117,8 @@ export default function NewOrg() {
     } catch (e) {
       if (e instanceof Error && e.message === 'cancelled') {
         // user closed the Razorpay modal — no toast needed
+      } else if (e instanceof ApiError && /coupon/i.test(e.message)) {
+        setErrors((p) => ({ ...p, couponCode: e.message }));
       } else {
         const message = e instanceof ApiError ? e.message : 'Something went wrong';
         toast(message, 'bad');
@@ -129,7 +144,14 @@ export default function NewOrg() {
 
       <div className="mb-4">
         <Label>Name</Label>
-        <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Okonjo & Partners" />
+        <TextInput
+          value={name}
+          onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: undefined })); }}
+          placeholder="Okonjo & Partners"
+          maxLength={NAME_MAX_LENGTH}
+          invalid={!!errors.name}
+        />
+        <ErrorText>{errors.name}</ErrorText>
         <div className="text-[12.5px] text-neutral-600 mt-1.5">
           {name.trim() ? `manage.me/o/${slugify(name)}` : 'The slug is derived from the name.'}
         </div>
@@ -166,7 +188,7 @@ export default function NewOrg() {
               <button
                 key={p.id}
                 type="button"
-                onClick={() => setPlanId(p.id)}
+                onClick={() => { setPlanId(p.id); if (errors.plan) setErrors((prev) => ({ ...prev, plan: undefined })); }}
                 className={cn(
                   'flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left cursor-pointer transition-colors',
                   selectedPlanId === p.id ? 'border-accent bg-accent-200/40' : 'border-line hover:bg-ink/7',
@@ -190,11 +212,19 @@ export default function NewOrg() {
             ))}
           </div>
         )}
+        <ErrorText>{errors.plan}</ErrorText>
       </div>
 
       <div className="mb-6">
         <Label>Coupon code (optional)</Label>
-        <TextInput value={couponCode} onChange={(e) => setCouponCode(e.target.value)} placeholder="SAVE20" />
+        <TextInput
+          value={couponCode}
+          onChange={(e) => { setCouponCode(e.target.value); if (errors.couponCode) setErrors((p) => ({ ...p, couponCode: undefined })); }}
+          placeholder="SAVE20"
+          maxLength={COUPON_MAX_LENGTH}
+          invalid={!!errors.couponCode}
+        />
+        <ErrorText>{errors.couponCode}</ErrorText>
       </div>
 
       <Button variant="primary" className="w-full" onClick={submit} disabled={submitting || !plansLoaded || plans.length === 0}>

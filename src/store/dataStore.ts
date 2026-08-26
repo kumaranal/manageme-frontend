@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api, ApiError } from '@/lib/api';
 import { usePeopleStore, warmPeopleCache, collectPersonIds } from '@/store/peopleStore';
+import { assertUploadable } from '@/lib/storage';
 import type {
   Organization, Project, Issue, IssueType, Priority, StoreKind, TaskField, OrgRole, ProjectRole,
   DiscoverableOrg,
@@ -56,14 +57,16 @@ interface DataState {
   completeSprint: (orgId: string, projectId: string, sprintId: string) => Promise<void>;
 
   createIssue: (orgId: string, projectId: string, data: {
-    title: string; type: IssueType; statusId: string; priority: Priority; assignee: string | null;
+    title: string; description?: string; type: IssueType; statusId: string; priority: Priority; assignee: string | null;
     due: string | null; labels: string[]; estimatedHours: number | null; sprintId: string | null;
-  }) => Promise<void>;
+  }) => Promise<string | undefined>;
   updateIssue: (orgId: string, projectId: string, issueId: string, patch: Partial<Issue>, activityText?: string) => Promise<void>;
   moveIssue: (orgId: string, projectId: string, issueId: string, statusId: string, index: number) => Promise<void>;
   addComment: (orgId: string, projectId: string, issueId: string, body: string) => Promise<void>;
   addCc: (orgId: string, projectId: string, issueId: string, userId: string) => Promise<void>;
   removeCc: (orgId: string, projectId: string, issueId: string, userId: string) => Promise<void>;
+  addAttachments: (orgId: string, projectId: string, issueId: string, files: File[]) => Promise<void>;
+  removeAttachment: (orgId: string, projectId: string, issueId: string, attachmentId: string) => Promise<void>;
 
   createStoreItem: (orgId: string, projectId: string, data: { title: string; kind: StoreKind; content: string }) => Promise<string | undefined>;
   updateStoreItem: (orgId: string, projectId: string, itemId: string, patch: { title?: string; content?: string; kind?: StoreKind }, historyText?: string) => Promise<void>;
@@ -163,10 +166,18 @@ export const useDataStore = create<DataState>((set, get) => {
     },
 
     inviteMember: async (orgId, email, role) => {
-      await run(async () => {
-        await api.post(`/organizations/${orgId}/invites`, { email, role });
+      try {
+        const { emailSent } = await api.post<{ emailSent: boolean }>(`/organizations/${orgId}/invites`, { email, role });
         await get().refreshOrg(orgId);
-      }, `Invitation sent to ${email}`);
+        if (emailSent) {
+          get().toast(`Invitation sent to ${email}`);
+        } else {
+          get().toast(`Invite created for ${email}, but the email could not be delivered — share the invite link manually`, 'bad');
+        }
+      } catch (e) {
+        const message = e instanceof ApiError ? e.message : 'Something went wrong';
+        get().toast(message, 'bad');
+      }
     },
 
     revokeInvite: async (orgId, inviteId) => {
@@ -304,10 +315,13 @@ export const useDataStore = create<DataState>((set, get) => {
     },
 
     createIssue: async (orgId, projectId, data) => {
+      let id: string | undefined;
       await run(async () => {
-        await api.post(`/organizations/${orgId}/projects/${projectId}/issues`, data);
+        const created = await api.post<{ id: string }>(`/organizations/${orgId}/projects/${projectId}/issues`, data);
+        id = created.id;
         await get().refreshOrg(orgId);
       }, `${data.title.slice(0, 40)} created`);
+      return id;
     },
 
     updateIssue: async (orgId, projectId, issueId, patch, activityText) => {
@@ -345,6 +359,36 @@ export const useDataStore = create<DataState>((set, get) => {
         await api.delete(`/organizations/${orgId}/projects/${projectId}/issues/${issueId}/cc/${userId}`);
         await get().refreshOrg(orgId);
       });
+    },
+
+    addAttachments: async (orgId, projectId, issueId, files) => {
+      try {
+        for (const file of files) {
+          assertUploadable(file);
+          const form = new FormData();
+          form.append('file', file);
+          await api.postForm(
+            `/organizations/${orgId}/projects/${projectId}/issues/${issueId}/attachments`,
+            form,
+          );
+        }
+        await get().refreshOrg(orgId);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Could not upload attachment';
+        get().toast(message, 'bad');
+      }
+    },
+
+    removeAttachment: async (orgId, projectId, issueId, attachmentId) => {
+      try {
+        await api.delete(
+          `/organizations/${orgId}/projects/${projectId}/issues/${issueId}/attachments/${attachmentId}`,
+        );
+        await get().refreshOrg(orgId);
+      } catch (e) {
+        const message = e instanceof ApiError ? e.message : 'Could not remove attachment';
+        get().toast(message, 'bad');
+      }
     },
 
     createStoreItem: async (orgId, projectId, data) => {

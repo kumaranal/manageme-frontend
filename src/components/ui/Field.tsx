@@ -4,16 +4,28 @@ import { Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 const baseInput = 'w-full h-[42px] border border-line rounded-full bg-canvas px-4 text-sm focus:outline-none focus:border-accent transition-colors placeholder:text-neutral-500';
+const invalidInput = 'border-red-400 focus:border-red-500';
 
-export function TextInput({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cn(baseInput, className)} {...rest} />;
+export function TextInput({ className, invalid, ...rest }: InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }) {
+  return (
+    <input
+      className={cn(baseInput, invalid && invalidInput, className)}
+      aria-invalid={invalid || undefined}
+      {...rest}
+    />
+  );
 }
 
-export function PasswordInput({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
+export function PasswordInput({ className, invalid, ...rest }: InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }) {
   const [visible, setVisible] = useState(false);
   return (
     <div className="relative">
-      <input type={visible ? 'text' : 'password'} className={cn(baseInput, 'pr-11', className)} {...rest} />
+      <input
+        type={visible ? 'text' : 'password'}
+        className={cn(baseInput, 'pr-11', invalid && invalidInput, className)}
+        aria-invalid={invalid || undefined}
+        {...rest}
+      />
       <button
         type="button"
         tabIndex={-1}
@@ -49,6 +61,11 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
 
 export function Label({ children }: { children: ReactNode }) {
   return <div className="text-[11px] font-semibold tracking-wider uppercase text-neutral-600 mb-1.5">{children}</div>;
+}
+
+export function ErrorText({ children }: { children?: ReactNode }) {
+  if (!children) return null;
+  return <div role="alert" className="text-[12.5px] text-red-600 mt-1.5">{children}</div>;
 }
 
 export function FieldRow({ label, children }: { label: string; children: ReactNode }) {

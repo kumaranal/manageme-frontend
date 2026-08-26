@@ -1,16 +1,24 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { AuthLayout } from '@/layout/AuthLayout';
-import { TextInput, PasswordInput } from '@/components/ui/Field';
+import { TextInput, PasswordInput, ErrorText } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { useAuthStore } from '@/store/authStore';
 import { useDataStore } from '@/store/dataStore';
+import { isValidEmail, passwordError } from '@/lib/validation';
+
+interface FormErrors {
+  name?: string;
+  email?: string;
+  password?: string;
+}
 
 export default function Signup() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const navigate = useNavigate();
@@ -18,19 +26,19 @@ export default function Signup() {
   const signUp = useAuthStore((s) => s.signUp);
   const toast = useDataStore((s) => s.toast);
 
+  const validate = (): boolean => {
+    const next: FormErrors = {};
+    if (!name.trim()) next.name = 'Enter your full name';
+    else if (name.trim().length < 2) next.name = 'Name must be at least 2 characters';
+    if (!isValidEmail(email)) next.email = 'Enter a valid email address';
+    const pwError = passwordError(password);
+    if (pwError) next.password = pwError;
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
   const submit = async () => {
-    if (!name.trim()) {
-      toast('Enter your full name', 'bad');
-      return;
-    }
-    if (!email.includes('@')) {
-      toast('Enter a valid email address', 'bad');
-      return;
-    }
-    if (password.length < 8) {
-      toast('Password must be at least 8 characters', 'bad');
-      return;
-    }
+    if (!validate()) return;
     setSubmitting(true);
     try {
       await signUp(email, password, name.trim());
@@ -69,15 +77,32 @@ export default function Signup() {
       <OAuthButtons />
       <div className="mb-3">
         <div className="text-[12px] font-semibold tracking-wider uppercase text-neutral-600 mb-1">Full name</div>
-        <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Okonjo" />
+        <TextInput
+          value={name}
+          onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: undefined })); }}
+          placeholder="Ada Okonjo"
+          invalid={!!errors.name}
+        />
+        <ErrorText>{errors.name}</ErrorText>
       </div>
       <div className="mb-3">
         <div className="text-[12px] font-semibold tracking-wider uppercase text-neutral-600 mb-1">Work email</div>
-        <TextInput value={email} onChange={(e) => setEmail(e.target.value)} />
+        <TextInput
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors((p) => ({ ...p, email: undefined })); }}
+          invalid={!!errors.email}
+        />
+        <ErrorText>{errors.email}</ErrorText>
       </div>
       <div className="mb-6">
         <div className="text-[12px] font-semibold tracking-wider uppercase text-neutral-600 mb-1">Password</div>
-        <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
+        <PasswordInput
+          value={password}
+          onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors((p) => ({ ...p, password: undefined })); }}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          invalid={!!errors.password}
+        />
+        <ErrorText>{errors.password}</ErrorText>
       </div>
       <Button variant="primary" className="w-full" onClick={submit} disabled={submitting}>
         {submitting ? 'Creating…' : 'Continue'}

@@ -1,17 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthLayout } from '@/layout/AuthLayout';
-import { PasswordInput } from '@/components/ui/Field';
+import { PasswordInput, ErrorText } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { useDataStore } from '@/store/dataStore';
+import { passwordError } from '@/lib/validation';
+
+interface FormErrors {
+  password?: string;
+  confirmPassword?: string;
+}
 
 export default function ResetPassword() {
   const [ready, setReady] = useState(false);
   const [invalidLink, setInvalidLink] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
   const updatePassword = useAuthStore((s) => s.updatePassword);
@@ -47,15 +54,17 @@ export default function ResetPassword() {
     };
   }, []);
 
+  const validate = (): boolean => {
+    const next: FormErrors = {};
+    const pwError = passwordError(password);
+    if (pwError) next.password = pwError;
+    else if (password !== confirmPassword) next.confirmPassword = 'Passwords do not match';
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
   const submit = async () => {
-    if (password.length < 8) {
-      toast('Password must be at least 8 characters', 'bad');
-      return;
-    }
-    if (password !== confirmPassword) {
-      toast('Passwords do not match', 'bad');
-      return;
-    }
+    if (!validate()) return;
     setSubmitting(true);
     try {
       await updatePassword(password);
@@ -95,11 +104,23 @@ export default function ResetPassword() {
       <p className="text-neutral-600 mb-6">Choose a new password for your account.</p>
       <div className="mb-3">
         <div className="text-[12px] font-semibold tracking-wider uppercase text-neutral-600 mb-1">New password</div>
-        <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
+        <PasswordInput
+          value={password}
+          onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors((p) => ({ ...p, password: undefined })); }}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          invalid={!!errors.password}
+        />
+        <ErrorText>{errors.password}</ErrorText>
       </div>
       <div className="mb-6">
         <div className="text-[12px] font-semibold tracking-wider uppercase text-neutral-600 mb-1">Confirm password</div>
-        <PasswordInput value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
+        <PasswordInput
+          value={confirmPassword}
+          onChange={(e) => { setConfirmPassword(e.target.value); if (errors.confirmPassword) setErrors((p) => ({ ...p, confirmPassword: undefined })); }}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          invalid={!!errors.confirmPassword}
+        />
+        <ErrorText>{errors.confirmPassword}</ErrorText>
       </div>
       <Button variant="primary" className="w-full" onClick={submit} disabled={submitting}>
         {submitting ? 'Updating…' : 'Update password'}

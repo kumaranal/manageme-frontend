@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useOrg, useProject, usePermissions, useMe } from '@/hooks/useScope';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
@@ -7,8 +8,18 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useDataStore } from '@/store/dataStore';
 import { usePeopleStore } from '@/store/peopleStore';
 import { isOrgAdmin as checkOrgAdmin } from '@/lib/permissions';
-import type { ProjectRole, TaskField } from '@/types';
+import type { ProjectRole, Status, TaskField } from '@/types';
 import clsx from 'clsx';
+
+interface StatusDraft { name: string; }
+interface FieldDraft { enabled: boolean; required: boolean; }
+
+function seedStatusDrafts(statuses: Status[]): Record<string, StatusDraft> {
+  return Object.fromEntries(statuses.map((s) => [s.id, { name: s.name }]));
+}
+function seedFieldDrafts(fields: TaskField[]): Record<string, FieldDraft> {
+  return Object.fromEntries(fields.map((f) => [f.id, { enabled: f.enabled, required: f.required }]));
+}
 
 export default function Settings() {
   const org = useOrg();
@@ -28,12 +39,56 @@ export default function Settings() {
   const toggleArchiveProject = useDataStore((s) => s.toggleArchiveProject);
   const people = usePeopleStore((s) => s.people);
 
+  const [statusDrafts, setStatusDrafts] = useState<Record<string, StatusDraft>>({});
+  const [fieldDrafts, setFieldDrafts] = useState<Record<string, FieldDraft>>({});
+  const [seededIds, setSeededIds] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
   if (!org || !project) return null;
 
   const addableMembers = org.members.filter((m) => !project.members.some((pm) => pm.userId === m.userId));
 
+  // Re-seed the drafts whenever a column is added/removed/reordered elsewhere,
+  // following the drawer's "adjusting state during render" pattern — rename
+  // edits and field toggles only reach the server once Save is clicked below.
+  const idsKey = `${project.statuses.map((s) => s.id).join(',')}|${project.taskFields.map((f) => f.id).join(',')}`;
+  if (idsKey !== seededIds) {
+    setSeededIds(idsKey);
+    setStatusDrafts(seedStatusDrafts(project.statuses));
+    setFieldDrafts(seedFieldDrafts(project.taskFields));
+  }
+
+  const statusChanges = project.statuses.filter((s) => statusDrafts[s.id]?.name !== s.name);
+  const fieldChanges = project.taskFields.filter((f) => {
+    const d = fieldDrafts[f.id];
+    return d && (d.enabled !== f.enabled || d.required !== f.required);
+  });
+  const dirty = statusChanges.length > 0 || fieldChanges.length > 0;
+
+  const saveSettings = async () => {
+    setSaving(true);
+    try {
+      for (const s of statusChanges) await renameStatus(org.id, project.id, s.id, statusDrafts[s.id].name);
+      for (const f of fieldChanges) await updateTaskField(org.id, project.id, f.id, fieldDrafts[f.id] as Partial<TaskField>);
+    } finally {
+      setSaving(false);
+      setSeededIds(null);
+    }
+  };
+
+  const discardSettings = () => {
+    setStatusDrafts(seedStatusDrafts(project.statuses));
+    setFieldDrafts(seedFieldDrafts(project.taskFields));
+  };
+
   return (
     <div className="flex flex-col gap-4 max-w-[820px]">
+      <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 bg-canvas/95 backdrop-blur flex items-center gap-2 border-b border-line">
+        <Button variant="primary" size="sm" onClick={saveSettings} disabled={!dirty || saving}>{saving ? 'Saving…' : 'Save changes'}</Button>
+        <Button variant="secondary" size="sm" onClick={discardSettings} disabled={!dirty || saving}>Discard</Button>
+        {dirty && <span className="text-[12px] text-neutral-600">Unsaved changes</span>}
+      </div>
+
       <div className="bg-neutral-100 rounded-3xl overflow-hidden shadow-sm">
         <div className="flex items-center px-4 sm:px-6 pt-4 pb-3">
           <div className="flex-1 font-heading text-xl">Board columns</div>
@@ -46,9 +101,9 @@ export default function Settings() {
             <div key={st.id} className="flex flex-wrap items-center gap-2.5 px-4 sm:px-6 py-2.5 border-t border-line">
               <div className="w-5 text-[12.5px] text-neutral-600">{idx + 1}</div>
               <input
-                value={st.name}
+                value={statusDrafts[st.id]?.name ?? st.name}
                 disabled={!canEdit}
-                onChange={(e) => renameStatus(org.id, project.id, st.id, e.target.value)}
+                onChange={(e) => setStatusDrafts((prev) => ({ ...prev, [st.id]: { name: e.target.value } }))}
                 className="flex-1 min-w-[100px] h-9 border border-transparent rounded-full px-3 text-sm bg-transparent focus:outline-none focus:border-accent focus:bg-canvas"
               />
               <div className="hidden sm:block px-2.5 py-0.5 rounded-full bg-canvas text-neutral-600 text-[10.5px] font-semibold tracking-wider uppercase">{st.category.replace('_', ' ')}</div>
@@ -86,15 +141,18 @@ export default function Settings() {
             <div className="flex-1 text-sm">{f.label}</div>
             <div className="w-[90px]">
               <input
-                type="checkbox" checked={f.enabled} disabled={!canEdit}
-                onChange={(e) => updateTaskField(org.id, project.id, f.id, { enabled: e.target.checked, required: e.target.checked ? f.required : false } as Partial<TaskField>)}
+                type="checkbox" checked={fieldDrafts[f.id]?.enabled ?? f.enabled} disabled={!canEdit}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  setFieldDrafts((prev) => ({ ...prev, [f.id]: { enabled, required: enabled ? (prev[f.id]?.required ?? f.required) : false } }));
+                }}
                 className="w-[18px] h-[18px] accent-accent cursor-pointer"
               />
             </div>
             <div className="w-[90px]">
               <input
-                type="checkbox" checked={f.required} disabled={!canEdit || !f.enabled}
-                onChange={(e) => updateTaskField(org.id, project.id, f.id, { required: e.target.checked })}
+                type="checkbox" checked={fieldDrafts[f.id]?.required ?? f.required} disabled={!canEdit || !(fieldDrafts[f.id]?.enabled ?? f.enabled)}
+                onChange={(e) => setFieldDrafts((prev) => ({ ...prev, [f.id]: { enabled: prev[f.id]?.enabled ?? f.enabled, required: e.target.checked } }))}
                 className="w-[18px] h-[18px] accent-accent2 cursor-pointer"
               />
             </div>

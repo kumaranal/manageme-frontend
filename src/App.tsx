@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useDataStore } from '@/store/dataStore';
+import { Toaster } from '@/components/ui/Toaster';
 
 import Login from '@/pages/auth/Login';
 import Landing from '@/pages/Landing';
@@ -71,6 +72,7 @@ export default function App() {
   }
 
   return (
+    <>
     <Suspense fallback={<div className="h-screen w-full flex items-center justify-center bg-canvas text-neutral-600">Loading…</div>}>
     <Routes>
       <Route
@@ -116,5 +118,7 @@ export default function App() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     </Suspense>
+    <Toaster />
+    </>
   );
 }

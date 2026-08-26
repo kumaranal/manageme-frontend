@@ -70,10 +70,22 @@ export interface ActivityEntry {
   at: string;
 }
 
+export interface Attachment {
+  id: string;
+  filename: string;
+  path: string;
+  url: string;
+  size: number;
+  mimeType: string;
+  uploadedBy: string;
+  createdAt: string;
+}
+
 export interface Issue {
   id: string;
   number: number;
   title: string;
+  description: string;
   type: IssueType;
   priority: Priority;
   assignee: string | null;
@@ -86,6 +98,7 @@ export interface Issue {
   estimatedHours: number | null;
   sprintId?: string | null;
   activity: ActivityEntry[];
+  attachments: Attachment[];
 }
 
 export interface StoreHistoryEntry {

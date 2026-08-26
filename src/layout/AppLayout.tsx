@@ -4,7 +4,6 @@ import { useDataStore } from '@/store/dataStore';
 import { useOrg } from '@/hooks/useScope';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
-import { Toaster } from '@/components/ui/Toaster';
 import { IssueDetailDrawer } from '@/components/IssueDetailDrawer';
 import { CreateIssueModal } from '@/components/CreateIssueModal';
 import { InviteModal } from '@/components/InviteModal';
@@ -36,7 +35,6 @@ export function AppLayout() {
         </div>
       </div>
 
-      <Toaster />
       <IssueDetailDrawer />
       <StoreItemDrawer />
       <CreateIssueModal />
