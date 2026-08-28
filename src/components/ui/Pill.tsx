@@ -1,13 +1,15 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
-type Tone = 'accent' | 'accent2' | 'neutral' | 'outline';
+type Tone = 'accent' | 'accent2' | 'neutral' | 'outline' | 'info' | 'danger';
 
 const toneClasses: Record<Tone, string> = {
   accent: 'bg-accent-200 text-accent-700',
   accent2: 'bg-accent2-200 text-accent2-700',
   neutral: 'bg-neutral-200 text-neutral-700',
   outline: 'border border-line text-neutral-800',
+  info: 'bg-blue-100 text-blue-700',
+  danger: 'bg-red-100 text-red-700',
 };
 
 export function Pill({

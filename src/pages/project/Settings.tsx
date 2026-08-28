@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useOrg, useProject, usePermissions, useMe } from '@/hooks/useScope';
 import { Button } from '@/components/ui/Button';
@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useDataStore } from '@/store/dataStore';
 import { usePeopleStore } from '@/store/peopleStore';
 import { isOrgAdmin as checkOrgAdmin } from '@/lib/permissions';
-import type { ProjectRole, Status, TaskField } from '@/types';
+import type { GithubRepoOption, ProjectRole, Status, TaskField } from '@/types';
 import clsx from 'clsx';
 
 interface StatusDraft { name: string; }
@@ -37,12 +37,17 @@ export default function Settings() {
   const updateProjectMemberRole = useDataStore((s) => s.updateProjectMemberRole);
   const removeProjectMember = useDataStore((s) => s.removeProjectMember);
   const toggleArchiveProject = useDataStore((s) => s.toggleArchiveProject);
+  const fetchGithubRepos = useDataStore((s) => s.fetchGithubRepos);
+  const linkProjectRepo = useDataStore((s) => s.linkProjectRepo);
+  const unlinkProjectRepo = useDataStore((s) => s.unlinkProjectRepo);
   const people = usePeopleStore((s) => s.people);
 
   const [statusDrafts, setStatusDrafts] = useState<Record<string, StatusDraft>>({});
   const [fieldDrafts, setFieldDrafts] = useState<Record<string, FieldDraft>>({});
   const [seededIds, setSeededIds] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [repoOptions, setRepoOptions] = useState<GithubRepoOption[] | null>(null);
+  const [loadingRepos, setLoadingRepos] = useState(false);
 
   if (!org || !project) return null;
 
@@ -79,6 +84,15 @@ export default function Settings() {
   const discardSettings = () => {
     setStatusDrafts(seedStatusDrafts(project.statuses));
     setFieldDrafts(seedFieldDrafts(project.taskFields));
+  };
+
+  const loadRepoOptions = async () => {
+    setLoadingRepos(true);
+    try {
+      setRepoOptions(await fetchGithubRepos(org.id));
+    } finally {
+      setLoadingRepos(false);
+    }
   };
 
   return (
@@ -182,6 +196,56 @@ export default function Settings() {
             <option value={4}>4 weeks</option>
           </Select>
         </div>
+      </div>
+
+      <div className="bg-neutral-100 rounded-3xl overflow-hidden shadow-sm">
+        <div className="px-4 sm:px-6 pt-4 pb-3">
+          <div className="font-heading text-xl">Repository</div>
+          <div className="text-[12.5px] text-neutral-600 mt-0.5">
+            The GitHub repo this project's branches are created against. Only the project lead can change this.
+          </div>
+        </div>
+        {!org.gitConnection ? (
+          <div className="px-4 sm:px-6 py-4 border-t border-line text-[13.5px] text-neutral-600">
+            No GitHub account is connected for this organization.
+            {canArchive ? (
+              <> An org admin needs to <Link to={`/o/${org.slug}/settings`} className="text-accent-700 font-semibold">connect GitHub</Link> first.</>
+            ) : (
+              ' Ask an org admin to connect GitHub first.'
+            )}
+          </div>
+        ) : project.repo ? (
+          <div className="flex flex-wrap items-center gap-4 px-4 sm:px-6 py-4 border-t border-line">
+            <div className="flex-1 min-w-[200px]">
+              <div className="text-sm font-semibold">{project.repo.repoFullName}</div>
+              <div className="text-[12.5px] text-neutral-600">default branch: {project.repo.defaultBranch}</div>
+            </div>
+            {canArchive && (
+              <Button variant="danger" onClick={() => unlinkProjectRepo(org.id, project.id)}>Unlink</Button>
+            )}
+          </div>
+        ) : canArchive ? (
+          <div className="flex flex-wrap items-center gap-3 px-4 sm:px-6 py-4 border-t border-line">
+            {repoOptions === null ? (
+              <Button variant="secondary" size="sm" onClick={loadRepoOptions} disabled={loadingRepos}>
+                {loadingRepos ? 'Loading…' : 'Choose repository…'}
+              </Button>
+            ) : (
+              <select
+                value=""
+                onChange={(e) => { if (e.target.value) linkProjectRepo(org.id, project.id, Number(e.target.value)); }}
+                className="h-9 border border-line rounded-full px-3.5 text-[13px] bg-canvas"
+              >
+                <option value="">{repoOptions.length ? 'Select a repository…' : 'No repositories accessible to the connected account'}</option>
+                {repoOptions.map((r) => <option key={r.repoId} value={r.repoId}>{r.fullName}</option>)}
+              </select>
+            )}
+          </div>
+        ) : (
+          <div className="px-4 sm:px-6 py-4 border-t border-line text-[13.5px] text-neutral-600">
+            No repository linked yet.
+          </div>
+        )}
       </div>
 
       <div className="bg-neutral-100 rounded-3xl overflow-hidden shadow-sm">

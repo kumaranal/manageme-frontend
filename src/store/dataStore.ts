@@ -4,7 +4,7 @@ import { usePeopleStore, warmPeopleCache, collectPersonIds } from '@/store/peopl
 import { assertUploadable } from '@/lib/storage';
 import type {
   Organization, Project, Issue, IssueType, Priority, StoreKind, TaskField, OrgRole, ProjectRole,
-  DiscoverableOrg,
+  DiscoverableOrg, GithubRepoOption,
 } from '@/types';
 
 export interface Toast {
@@ -71,6 +71,13 @@ interface DataState {
   createStoreItem: (orgId: string, projectId: string, data: { title: string; kind: StoreKind; content: string }) => Promise<string | undefined>;
   updateStoreItem: (orgId: string, projectId: string, itemId: string, patch: { title?: string; content?: string; kind?: StoreKind }, historyText?: string) => Promise<void>;
   deleteStoreItem: (orgId: string, projectId: string, itemId: string) => Promise<void>;
+
+  getGitInstallUrl: (orgId: string) => Promise<string | undefined>;
+  disconnectGit: (orgId: string) => Promise<void>;
+  fetchGithubRepos: (orgId: string) => Promise<GithubRepoOption[]>;
+  linkProjectRepo: (orgId: string, projectId: string, repoId: number) => Promise<void>;
+  unlinkProjectRepo: (orgId: string, projectId: string) => Promise<void>;
+  createIssueBranch: (orgId: string, projectId: string, issueId: string, slug: string) => Promise<void>;
 }
 
 function rid(prefix: string): string {
@@ -411,6 +418,55 @@ export const useDataStore = create<DataState>((set, get) => {
         await api.delete(`/organizations/${orgId}/projects/${projectId}/store/${itemId}`);
         await get().refreshOrg(orgId);
       });
+    },
+
+    getGitInstallUrl: async (orgId) => {
+      try {
+        const { url } = await api.get<{ url: string }>(`/organizations/${orgId}/git/install-url`);
+        return url;
+      } catch (e) {
+        const message = e instanceof ApiError ? e.message : 'Could not start the GitHub connection';
+        get().toast(message, 'bad');
+        return undefined;
+      }
+    },
+
+    disconnectGit: async (orgId) => {
+      await run(async () => {
+        await api.delete(`/organizations/${orgId}/git/connection`);
+        await get().refreshOrg(orgId);
+      }, 'GitHub disconnected');
+    },
+
+    fetchGithubRepos: async (orgId) => {
+      try {
+        return await api.get<GithubRepoOption[]>(`/organizations/${orgId}/git/repos`);
+      } catch (e) {
+        const message = e instanceof ApiError ? e.message : 'Could not load repositories';
+        get().toast(message, 'bad');
+        return [];
+      }
+    },
+
+    linkProjectRepo: async (orgId, projectId, repoId) => {
+      await run(async () => {
+        await api.put(`/organizations/${orgId}/projects/${projectId}/git/repo`, { repoId });
+        await get().refreshOrg(orgId);
+      }, 'Repository linked');
+    },
+
+    unlinkProjectRepo: async (orgId, projectId) => {
+      await run(async () => {
+        await api.delete(`/organizations/${orgId}/projects/${projectId}/git/repo`);
+        await get().refreshOrg(orgId);
+      }, 'Repository unlinked');
+    },
+
+    createIssueBranch: async (orgId, projectId, issueId, slug) => {
+      await run(async () => {
+        await api.post(`/organizations/${orgId}/projects/${projectId}/issues/${issueId}/branches`, { slug });
+        await get().refreshOrg(orgId);
+      }, 'Branch created');
     },
   };
 });
