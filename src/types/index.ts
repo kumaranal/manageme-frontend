@@ -7,6 +7,7 @@ export type Priority = 'Urgent' | 'High' | 'Medium' | 'Low';
 export type SprintStatus = 'PLANNED' | 'ACTIVE' | 'CLOSED';
 export type StoreKind = 'DOC' | 'ENV' | 'LINK' | 'NOTE';
 export type WorkloadPeriod = 'day' | 'week' | 'month';
+export type PrState = 'NONE' | 'OPEN' | 'DRAFT' | 'MERGED' | 'CLOSED';
 
 export interface User {
   id: string;
@@ -81,6 +82,17 @@ export interface Attachment {
   createdAt: string;
 }
 
+export interface IssueBranch {
+  id: string;
+  branchName: string;
+  createdBy: string;
+  prNumber: number | null;
+  prState: PrState;
+  prUrl: string | null;
+  prTitle: string | null;
+  createdAt: string;
+}
+
 export interface Issue {
   id: string;
   number: number;
@@ -99,6 +111,7 @@ export interface Issue {
   sprintId?: string | null;
   activity: ActivityEntry[];
   attachments: Attachment[];
+  branches: IssueBranch[];
 }
 
 export interface StoreHistoryEntry {
@@ -117,6 +130,14 @@ export interface StoreItem {
   history: StoreHistoryEntry[];
 }
 
+export interface ProjectRepo {
+  id: string;
+  repoId: number;
+  repoFullName: string;
+  defaultBranch: string;
+  linkedBy: string;
+}
+
 export interface Project {
   id: string;
   key: string;
@@ -132,6 +153,21 @@ export interface Project {
   members: ProjectMembership[];
   statuses: Status[];
   issues: Issue[];
+  repo: ProjectRepo | null;
+}
+
+export interface GitConnection {
+  id: string;
+  accountLogin: string;
+  accountType: string;
+  connectedBy: string;
+  createdAt: string;
+}
+
+export interface GithubRepoOption {
+  repoId: number;
+  fullName: string;
+  defaultBranch: string;
 }
 
 export interface Organization {
@@ -144,6 +180,7 @@ export interface Organization {
   members: Membership[];
   invites: Invite[];
   projects: Project[];
+  gitConnection: GitConnection | null;
 }
 
 export interface DiscoverableOrg {

@@ -23,6 +23,7 @@ const MyWork = lazy(() => import('@/pages/MyWork'));
 const Projects = lazy(() => import('@/pages/Projects'));
 const Members = lazy(() => import('@/pages/Members'));
 const OrgWorkload = lazy(() => import('@/pages/OrgWorkload'));
+const OrgSettings = lazy(() => import('@/pages/OrgSettings'));
 
 import { AdminLayout } from '@/layout/AdminLayout';
 const AdminOverview = lazy(() => import('@/pages/admin/AdminOverview'));
@@ -104,6 +105,7 @@ export default function App() {
         <Route path="projects" element={<Projects />} />
         <Route path="members" element={<Members />} />
         <Route path="workload" element={<OrgWorkload />} />
+        <Route path="settings" element={<OrgSettings />} />
         <Route path="p/:projectKey">
           <Route index element={<Navigate to="board" replace />} />
           <Route path="board" element={<Board />} />

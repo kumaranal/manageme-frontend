@@ -5,7 +5,7 @@ import { Select, TextInput, TextArea } from '@/components/ui/Field';
 import { Pill } from '@/components/ui/Pill';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
-import { File as FileIcon } from 'lucide-react';
+import { File as FileIcon, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useOrg, useProject, usePermissions, useMe } from '@/hooks/useScope';
 import { useDataStore } from '@/store/dataStore';
@@ -45,6 +45,25 @@ function draftFromIssue(issue: Issue): IssueDraft {
     description: issue.description,
     cc: [...issue.cc],
   };
+}
+
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
+
+const PR_STATE_LABEL: Record<string, string> = {
+  NONE: 'No PR yet', OPEN: 'Open', DRAFT: 'Draft', MERGED: 'Merged', CLOSED: 'Closed',
+};
+const PR_STATE_TONE: Record<string, 'accent2' | 'neutral' | 'outline' | 'info' | 'danger'> = {
+  NONE: 'neutral', OPEN: 'info', DRAFT: 'outline', MERGED: 'accent2', CLOSED: 'danger',
+};
+
+function checkoutCommand(branchName: string): string {
+  return `git fetch origin ${branchName} && git checkout ${branchName}`;
 }
 
 const PAGE_SIZE = 3;
@@ -99,10 +118,14 @@ export function IssueDetailDrawer() {
   const removeCc = useDataStore((s) => s.removeCc);
   const addAttachments = useDataStore((s) => s.addAttachments);
   const removeAttachment = useDataStore((s) => s.removeAttachment);
+  const createIssueBranch = useDataStore((s) => s.createIssueBranch);
   const toast = useDataStore((s) => s.toast);
   const [commentDraft, setCommentDraft] = useState('');
   const [draft, setDraft] = useState<IssueDraft>(EMPTY_DRAFT);
   const [draftIssueId, setDraftIssueId] = useState<string | null>(null);
+  const [creatingBranch, setCreatingBranch] = useState(false);
+  const [branchSlug, setBranchSlug] = useState('');
+  const [creatingBranchBusy, setCreatingBranchBusy] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const pendingPreviewUrls = useImagePreviewUrls(pendingFiles);
   const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
@@ -110,7 +133,8 @@ export function IssueDetailDrawer() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activityPage, setActivityPage] = useState(0);
   const [commentsPage, setCommentsPage] = useState(0);
-  const [activeTab, setActiveTab] = useState<'comments' | 'activity'>('comments');
+  const [activeTab, setActiveTab] = useState<'comments' | 'activity' | 'branches'>('comments');
+  const [copiedBranchId, setCopiedBranchId] = useState<string | null>(null);
   const people = usePeopleStore((s) => s.people);
 
   const issueId = params.get('issue');
@@ -128,6 +152,8 @@ export function IssueDetailDrawer() {
   if (issue && issue.id !== draftIssueId) {
     setDraftIssueId(issue.id);
     setDraft(draftFromIssue(issue));
+    setCreatingBranch(false);
+    setBranchSlug(slugify(issue.title));
   }
 
   const close = () => {
@@ -480,9 +506,88 @@ export function IssueDetailDrawer() {
         >
           Activity{issue.activity.length > 0 ? ` (${issue.activity.length})` : ''}
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('branches')}
+          className={cn(
+            'h-7 px-4 rounded-full text-[12px] font-semibold tracking-wider uppercase transition-colors cursor-pointer',
+            activeTab === 'branches' ? 'bg-canvas text-ink shadow-sm' : 'text-neutral-600 hover:text-ink',
+          )}
+        >
+          Branches{issue.branches.length > 0 ? ` (${issue.branches.length})` : ''}
+        </button>
       </div>
 
-      {activeTab === 'comments' ? (
+      {activeTab === 'branches' ? (
+        <div className="flex flex-col gap-2 min-h-[228px]">
+          {!project.repo && (
+            <div className="text-[13.5px] text-neutral-600">
+              No repository linked to this project yet. An admin can link one from project settings.
+            </div>
+          )}
+          {issue.branches.map((b) => (
+            <div key={b.id} className="flex flex-wrap items-center gap-2 px-3 py-2 rounded-xl bg-ink/5">
+              <Pill tone="outline" size="sm" className="font-mono normal-case">{b.branchName}</Pill>
+              <Pill tone={PR_STATE_TONE[b.prState]} size="sm">{PR_STATE_LABEL[b.prState]}</Pill>
+              {b.prUrl && (
+                <a href={b.prUrl} target="_blank" rel="noreferrer" className="text-[12.5px] text-accent-700 font-semibold truncate">
+                  {b.prTitle ? `#${b.prNumber} ${b.prTitle}` : `View PR #${b.prNumber}`}
+                </a>
+              )}
+              <button
+                type="button"
+                title="Copy checkout command"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(checkoutCommand(b.branchName));
+                  setCopiedBranchId(b.id);
+                  toast('Checkout command copied');
+                  setTimeout(() => setCopiedBranchId((id) => (id === b.id ? null : id)), 1500);
+                }}
+                className="ml-auto flex items-center gap-1 h-6 px-2 rounded-full border border-line text-[11px] font-medium text-neutral-700 hover:text-ink hover:bg-canvas cursor-pointer"
+              >
+                {copiedBranchId === b.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                {copiedBranchId === b.id ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          ))}
+          {issue.branches.length === 0 && project.repo && !creatingBranch && (
+            <div className="text-[13.5px] text-neutral-600">No branches yet.</div>
+          )}
+          {project.repo && canEdit && (
+            creatingBranch ? (
+              <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 rounded-xl bg-ink/5">
+                <span className="text-[12.5px] font-mono text-neutral-600 whitespace-nowrap">
+                  {issue.type.toLowerCase()}/{project.key}-{issue.number}-
+                </span>
+                <TextInput
+                  className="h-8 flex-1 min-w-[120px] font-mono"
+                  value={branchSlug}
+                  onChange={(e) => setBranchSlug(slugify(e.target.value))}
+                />
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={!branchSlug || creatingBranchBusy}
+                  onClick={async () => {
+                    setCreatingBranchBusy(true);
+                    try {
+                      await createIssueBranch(org.id, project.id, issue.id, branchSlug);
+                      setCreatingBranch(false);
+                    } finally {
+                      setCreatingBranchBusy(false);
+                    }
+                  }}
+                >
+                  {creatingBranchBusy ? 'Creating…' : 'Confirm'}
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setCreatingBranch(false)} disabled={creatingBranchBusy}>Cancel</Button>
+              </div>
+            ) : (
+              <Button variant="secondary" size="sm" className="w-fit" onClick={() => setCreatingBranch(true)}>Create branch</Button>
+            )
+          )}
+        </div>
+      ) : activeTab === 'comments' ? (
         <>
           {canComment && (
             <div className="flex flex-col gap-2.5 mb-5">

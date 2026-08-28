@@ -46,13 +46,14 @@ export function Sidebar() {
     toast(`Switched to ${orgs.find((o) => o.slug === slug)?.name ?? slug}`);
   };
 
-  const navItems: { id: string; label: string; count: number; to: string }[] = [
+  const navItems: { id: string; label: string; count?: number; to: string }[] = [
     { id: 'my-work', label: 'My work', count: org.projects.reduce((n, p) => n + p.issues.filter((i) => i.assignee === me).length, 0), to: `/o/${org.slug}/my-work` },
     { id: 'projects', label: 'Projects', count: org.projects.length, to: `/o/${org.slug}/projects` },
     { id: 'members', label: 'Members & invites', count: org.members.length, to: `/o/${org.slug}/members` },
   ];
   if (myRole === 'ORG_ADMIN') {
     navItems.push({ id: 'workload', label: 'Workload', count: org.members.length, to: `/o/${org.slug}/workload` });
+    navItems.push({ id: 'settings', label: 'Settings', to: `/o/${org.slug}/settings` });
   }
 
   return (
@@ -126,7 +127,7 @@ export function Sidebar() {
             )}
           >
             <div className="flex-1">{n.label}</div>
-            <div className="text-xs text-neutral-600">{n.count}</div>
+            {n.count !== undefined && <div className="text-xs text-neutral-600">{n.count}</div>}
           </Link>
         ))}
       </div>
