@@ -2,6 +2,7 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useDataStore } from '@/store/dataStore';
 import { useOrg } from '@/hooks/useScope';
+import { PageLoader } from '@/components/ui/PageLoader';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { IssueDetailDrawer } from '@/components/IssueDetailDrawer';
@@ -21,7 +22,7 @@ export function AppLayout() {
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   // Org data loads async after auth resolves — don't redirect away from a
   // deep link (hard refresh, bookmark) before the first fetch has landed.
-  if (!orgsLoaded) return null;
+  if (!orgsLoaded) return <PageLoader />;
   if (!org) return <Navigate to="/orgs" replace />;
   if (org.status === 'SUSPENDED' && !isSuperadmin) return <Navigate to="/orgs" replace />;
 
