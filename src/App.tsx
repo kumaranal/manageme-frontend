@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useDataStore } from '@/store/dataStore';
 import { Toaster } from '@/components/ui/Toaster';
+import { PageLoader } from '@/components/ui/PageLoader';
 
 import Login from '@/pages/auth/Login';
 import Landing from '@/pages/Landing';
@@ -69,12 +70,12 @@ export default function App() {
   }, [isAuthenticated, fetchOrgs, fetchDiscoverable, resetData]);
 
   if (status === 'loading') {
-    return <div className="h-screen w-full flex items-center justify-center bg-canvas text-neutral-600">Loading…</div>;
+    return <PageLoader />;
   }
 
   return (
     <>
-    <Suspense fallback={<div className="h-screen w-full flex items-center justify-center bg-canvas text-neutral-600">Loading…</div>}>
+    <Suspense fallback={<PageLoader />}>
     <Routes>
       <Route
         path="/"
